@@ -53,13 +53,12 @@ body {
   padding: 2rem;
   background: rgba(245, 239, 228, 0.95);
   backdrop-filter: blur(8px);
-  border-bottom: 1px solid rgba(0, 0, 0, 0.05);
 }
 
 .brand {
   font-family: "Courier New", monospace;
-  font-size: 1rem;
-  font-weight: 600;
+  font-size: 1.4rem;
+  font-weight: 300;
   letter-spacing: 0.15em;
   color: #18181b;
 }
@@ -109,18 +108,14 @@ body {
   position: relative;
   z-index: 2;
   display: flex;
-  gap: 150px;
   height: 100%;
-  align-items: center;
-  padding: 10vh 0; /* Prevent images from touching top/bottom */
-  will-change: transform;
+  align-items: flex-start;
+  will-change: transform, filter, opacity;
 }
 
 .gallery-image-wrapper {
   position: relative;
   flex-shrink: 0;
-  height: 50vh;
-  max-height: 500px;
   overflow: hidden;
   border: 0;
   padding: 0;
@@ -135,6 +130,10 @@ body {
 .gallery-image-wrapper:focus-visible {
   outline: 2px solid rgba(24, 24, 27, 0.72);
   outline-offset: 6px;
+}
+
+.gallery-image-wrapper--disabled {
+  cursor: default;
 }
 
 .gallery-image {
@@ -164,10 +163,11 @@ body {
   z-index: 1120;
   translate: -50% 0;
   color: #050505;
-  font-size: clamp(2rem, 5vw, 5.5rem);
-  line-height: 0.9;
-  font-weight: 700;
-  text-transform: uppercase;
+  font-family: "Courier New", Courier, monospace;
+  font-size: clamp(1.4rem, 3.2vw, 3.8rem);
+  line-height: 1;
+  font-weight: 300;
+  text-transform: none;
   letter-spacing: 0;
   pointer-events: none;
 }
@@ -192,10 +192,18 @@ body {
 .focused-image-frame {
   position: fixed;
   z-index: 1100;
-  overflow: hidden;
+  overflow: visible;
   pointer-events: none;
   box-shadow: 0 48px 140px rgba(0, 0, 0, 0.34);
   will-change: transform, left, top, width, height;
+}
+
+.focused-image-frame:not(.related-image-frame)::after {
+  content: "";
+  position: absolute;
+  inset: -21.5px;
+  border: 1.5px solid #000;
+  pointer-events: none;
 }
 
 .focused-image-frame img {
@@ -207,6 +215,7 @@ body {
 
 .related-image-frame {
   z-index: 1050;
+  overflow: hidden;
   pointer-events: auto;
   cursor: pointer;
   box-shadow: 0 30px 90px rgba(0, 0, 0, 0.28);
