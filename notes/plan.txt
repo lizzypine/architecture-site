@@ -1,0 +1,64 @@
+Project Plan: WordPress + React Site Architecture
+
+Goal:
+- Use WordPress as the backend content management system for Josh to add/manage entries.
+- Build the public-facing site as a separate React application that fetches content from WordPress via the REST API.
+- Allow WordPress to manage images, tags, featured toggles, and entry metadata.
+- Create a custom React homepage layout with an organic “field of images” experience rather than a traditional grid.
+
+Phase 1: Strategy & Architecture
+1. Define content model in WordPress:
+   - Custom post type (e.g. "Projects" or "Entries")
+   - Fields: image, title, description, tags, featured toggle, optional link
+   - Use WordPress media library for images and built-in tags or custom taxonomy for categories
+2. Set up WordPress as content-only backend:
+   - Minimal WordPress install
+   - Install essential plugins only (REST API, custom fields if needed)
+   - Lock down public WordPress theme/UI if not needed
+3. Design React architecture:
+   - Use create-react-app, Vite, or similar modern React tooling
+   - Fetch data from WordPress REST API
+   - Normalize content into frontend state
+   - Build reusable components for image cards, featured highlights, and layout arrangements
+
+Phase 2: React Prototype
+1. Build lightweight static prototype of the homepage:
+   - Create placeholder images and sample entry data
+   - Implement organic layout with flexible positioning, overlap, or flowing clusters
+   - Add animation/interactions: hover effects, subtle motion, featured entry emphasis
+   - Focus on visual rhythm, spacing, and responsive behavior
+2. Validate the prototype:
+   - Confirm the site feels right for the brand and content
+   - Make sure the layout can adapt to new entries and featured flags
+   - Test on desktop and mobile breakpoints
+
+Phase 3: WordPress Integration
+1. Configure WordPress content model:
+   - Create the custom post type and fields
+   - Add example entries with images, tags, and featured flags
+2. Connect React app to WordPress API:
+   - Use `fetch` or a client library to retrieve posts and media
+   - Map WordPress response fields to frontend components
+   - Implement featured filtering and tag-driven sections
+3. Make content dynamic:
+   - Ensure new WordPress entries appear automatically
+   - Render featured items with priority placement
+   - Use image media URLs directly from WordPress
+
+Phase 4: Deployment & Maintenance
+1. Deployment plan:
+   - Deploy React app as a static site (Netlify, Vercel, or Jamstack host)
+   - Host WordPress separately on managed hosting or a small VPS
+   - Configure CORS and API access between frontend and backend
+2. Maintenance expectations:
+   - React app: dependency updates a few times a year, build/test check before deploy
+   - WordPress: security updates, plugin/theme updates, content updates by Josh
+   - Monitor performance, API stability, and content refresh behavior
+
+Immediate next step:
+- Build the React homepage prototype using placeholder images and sample data.
+- Focus on the organic field-of-images layout and smooth animation before connecting WordPress.
+
+Progress update:
+- React prototype scaffold has been created with Vite.
+- Dependencies installed and the app is ready to run locally.
