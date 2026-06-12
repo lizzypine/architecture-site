@@ -649,6 +649,7 @@ function App() {
         scale: 0.96,
         filter: "blur(8px) saturate(0.72) brightness(0.94)",
       });
+      wrapper.dataset.initialReveal = wrapper.dataset.initialReveal || "true";
       wrapper.dataset.smoothX = "0";
       wrapper.dataset.smoothY = "12";
       wrapper.dataset.smoothScale = "0.96";
@@ -704,6 +705,11 @@ function App() {
         if (isNearViewport && !animatedImages.has(item.id)) {
           animatedImages.add(item.id);
 
+          const initialStagger =
+            wrapper.dataset.initialReveal === "true" && isVisible
+              ? clamp(rect.left / window.innerWidth, 0, 1) * 0.42
+              : 0;
+
           gsap.fromTo(
             wrapper,
             {
@@ -718,9 +724,10 @@ function App() {
               scale: 1,
               filter: "blur(0px) saturate(1) brightness(1)",
               duration: item.motion.duration,
-              delay: item.motion.delay,
+              delay: initialStagger + item.motion.delay,
               ease: "power3.out",
               onComplete: () => {
+                wrapper.dataset.initialReveal = "false";
                 wrapper.dataset.hasEntered = "true";
                 wrapper.dataset.smoothX = "0";
                 wrapper.dataset.smoothY = "0";
