@@ -30,6 +30,7 @@ const imageTags = {
 };
 
 const imageFocusEnabled = false;
+const galleryBatchWidth = 2520;
 
 const clusterPlacements = [
   { axis: "x", direction: -1, distance: 1.08, scale: 0.38 },
@@ -65,7 +66,16 @@ function getRandomBetween(min, max) {
   return Math.random() * (max - min) + min;
 }
 
-function getRandomLayout(laneIndex) {
+function rectsOverlap(first, second, padding = 0) {
+  return (
+    first.left < second.left + second.width + padding &&
+    first.left + first.width + padding > second.left &&
+    first.top < second.top + second.height + padding &&
+    first.top + first.height + padding > second.top
+  );
+}
+
+function getRandomLayout(itemIndex, batchIndex, occupiedRects = []) {
   const viewportHeight =
     typeof window === "undefined" ? 800 : window.innerHeight;
   const viewportPadding = Math.round(
@@ -78,8 +88,8 @@ function getRandomLayout(laneIndex) {
     80,
     viewportHeight - topPadding - bottomPadding,
   );
-  const minHeight = Math.min(112, availableHeight);
-  const maxHeight = Math.min(292, availableHeight);
+  const minHeight = Math.min(88, availableHeight);
+  const maxHeight = Math.min(260, availableHeight);
   const baseHeight = Math.round(getRandomBetween(minHeight, maxHeight));
   const shouldBeSmall = Math.random() < 0.2;
   const height = shouldBeSmall ? Math.round(baseHeight * 0.6) : baseHeight;
@@ -88,6 +98,7 @@ function getRandomLayout(laneIndex) {
     aspectRatios[Math.floor(Math.random() * aspectRatios.length)];
   const width = Math.round(height * aspectRatio);
   const maxTop = viewportHeight - bottomPadding - height;
+  const laneIndex = itemIndex % 3;
   const laneRanges = [
     [0, 0.24],
     [0.36, 0.58],
@@ -96,19 +107,63 @@ function getRandomLayout(laneIndex) {
   const [laneStart, laneEnd] = laneRanges[laneIndex % laneRanges.length];
   const laneTopStart = topPadding + (maxTop - topPadding) * laneStart;
   const laneTopEnd = topPadding + (maxTop - topPadding) * laneEnd;
-  const shouldOverlap = Math.random() < 0.2;
-  const overlapMin = Math.min(width * 0.18, 54);
-  const overlapMax = Math.min(width * 0.42, 120);
-  const gap = shouldOverlap
-    ? getRandomBetween(-overlapMax, -overlapMin)
-    : getRandomBetween(6, 46);
-  const shouldRelationshipMove = Math.random() < 0.25;
+  const clusterIndex = Math.floor(itemIndex / 3);
+  const clusterBaseX = batchIndex * galleryBatchWidth + clusterIndex * 420;
+  const laneXOffsets = [-80, 90, 260];
+  let left = clusterBaseX + laneXOffsets[laneIndex] + 140;
+  let top = getRandomBetween(laneTopStart, laneTopEnd);
+
+  for (let attempt = 0; attempt < 72; attempt += 1) {
+    const candidateLeft =
+      clusterBaseX +
+      laneXOffsets[laneIndex] +
+      getRandomBetween(-90, 130) +
+      140;
+    const candidateTop = getRandomBetween(laneTopStart, laneTopEnd);
+    const candidateRect = {
+      left: candidateLeft,
+      top: candidateTop,
+      width,
+      height,
+    };
+
+    if (
+      !occupiedRects.some((existingRect) =>
+        rectsOverlap(candidateRect, existingRect, 56),
+      )
+    ) {
+      left = candidateLeft;
+      top = candidateTop;
+      break;
+    }
+  }
+
+  let resolvedRect = {
+    left,
+    top,
+    width,
+    height,
+  };
+
+  while (
+    occupiedRects.some((existingRect) =>
+      rectsOverlap(resolvedRect, existingRect, 56),
+    )
+  ) {
+    left += 56;
+    resolvedRect = {
+      ...resolvedRect,
+      left,
+    };
+  }
+
+  const shouldRelationshipMove = false;
 
   return {
     width: `${width}px`,
     height: `${height}px`,
-    top: `${Math.round(getRandomBetween(laneTopStart, laneTopEnd))}px`,
-    gap: `${Math.round(gap)}px`,
+    left: `${Math.round(left)}px`,
+    top: `${Math.round(top)}px`,
     relationshipMotion: shouldRelationshipMove
       ? {
           targetX: getRandomBetween(8, 18) * (Math.random() < 0.5 ? -1 : 1),
@@ -127,29 +182,64 @@ function getRandomOpacity() {
 
 function getRandomImageMotion() {
   return {
-    depth: Number(getRandomBetween(0.2, 1).toFixed(2)),
     duration: Number(getRandomBetween(0.72, 1.08).toFixed(2)),
     delay: Number(getRandomBetween(0, 0.08).toFixed(2)),
   };
 }
 
-function createGalleryBatch(batchIndex) {
-  return shuffleArray(allImages).map((src, itemIndex) => ({
-    id: `${batchIndex}-${itemIndex}`,
-    batchIndex,
-    src,
-    alt: `Gallery image ${itemIndex + 1}`,
-    layout: getRandomLayout(itemIndex),
-    opacity: getRandomOpacity(),
-    tag: imageTags[src] || null,
-    motion: getRandomImageMotion(),
-  }));
+function createGalleryBatch(batchIndex, occupiedRects = []) {
+  return shuffleArray(allImages).map((src, itemIndex) => {
+    const layout = getRandomLayout(itemIndex, batchIndex, occupiedRects);
+
+    occupiedRects.push({
+      left: Number.parseFloat(layout.left),
+      top: Number.parseFloat(layout.top),
+      width: Number.parseFloat(layout.width),
+      height: Number.parseFloat(layout.height),
+    });
+
+    return {
+      id: `${batchIndex}-${itemIndex}`,
+      batchIndex,
+      src,
+      alt: `Gallery image ${itemIndex + 1}`,
+      layout,
+      opacity: getRandomOpacity(),
+      tag: imageTags[src] || null,
+      motion: getRandomImageMotion(),
+    };
+  });
 }
 
 function buildGalleryItems(batchCount = initialGalleryBatches) {
+  const occupiedRects = [];
+
   return Array.from({ length: batchCount }, (_, batchIndex) =>
-    createGalleryBatch(batchIndex),
+    createGalleryBatch(batchIndex, occupiedRects),
   ).flat();
+}
+
+function getOccupiedRects(items) {
+  return items.map((item) => ({
+    left: Number.parseFloat(item.layout.left),
+    top: Number.parseFloat(item.layout.top),
+    width: Number.parseFloat(item.layout.width),
+    height: Number.parseFloat(item.layout.height),
+  }));
+}
+
+function getGalleryTrackWidth(items) {
+  const contentWidth = items.reduce((maxRight, item) => {
+    const left = Number.parseFloat(item.layout.left);
+    const width = Number.parseFloat(item.layout.width);
+
+    return Math.max(maxRight, left + width);
+  }, 0);
+
+  const viewportWidth =
+    typeof window === "undefined" ? 1200 : window.innerWidth;
+
+  return Math.ceil(contentWidth + viewportWidth);
 }
 
 function getNextGalleryBatchIndex(items) {
@@ -670,16 +760,9 @@ function App() {
           rect.left > window.innerWidth + preEntryDistance;
         const wrapperCenter = rect.left + rect.width / 2;
         const viewportCenter = window.innerWidth / 2;
-        const viewportProgress = clamp(
-          wrapperCenter / window.innerWidth,
-          0,
-          1,
-        );
         const centerAmount =
           1 -
           clamp(Math.abs(wrapperCenter - viewportCenter) / viewportCenter, 0, 1);
-        const depthShift = (item.motion.depth - 0.5) * 44;
-        const parallaxX = (viewportProgress - 0.5) * depthShift;
         const centerScale = 1 - centerAmount * 0.05;
         const relationshipProgress = item.layout.relationshipMotion
           ? Number(wrapper.dataset.relationshipProgress || 0)
@@ -777,7 +860,7 @@ function App() {
 
             return otherZIndex > activeZIndex;
           });
-          const targetX = parallaxX + relationshipX;
+          const targetX = relationshipX;
           const targetY = relationshipY;
           const targetScale = centerScale;
           const smoothX = Number(wrapper.dataset.smoothX || 0);
@@ -837,8 +920,12 @@ function App() {
 
       setGalleryItems((currentItems) => {
         const nextBatchIndex = getNextGalleryBatchIndex(currentItems);
+        const occupiedRects = getOccupiedRects(currentItems);
 
-        return [...currentItems, ...createGalleryBatch(nextBatchIndex)];
+        return [
+          ...currentItems,
+          ...createGalleryBatch(nextBatchIndex, occupiedRects),
+        ];
       });
 
       requestAnimationFrame(() => {
@@ -937,7 +1024,11 @@ function App() {
 
       <div className="scroll-container" ref={scrollContainerRef}>
         <div className="sticky-wrapper">
-          <div className="gallery-track" ref={trackRef}>
+          <div
+            className="gallery-track"
+            ref={trackRef}
+            style={{ width: `${getGalleryTrackWidth(galleryItems)}px` }}
+          >
             {galleryItems.map((item) => (
               <button
                 key={item.id}
@@ -958,8 +1049,8 @@ function App() {
                 style={{
                   width: item.layout.width,
                   height: item.layout.height,
+                  left: item.layout.left,
                   top: item.layout.top,
-                  marginRight: item.layout.gap,
                   opacity: item.opacity,
                   zIndex: item.layout.zIndex,
                 }}

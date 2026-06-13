@@ -107,15 +107,12 @@ body {
 .gallery-track {
   position: relative;
   z-index: 2;
-  display: flex;
   height: 100%;
-  align-items: flex-start;
   will-change: transform, filter, opacity;
 }
 
 .gallery-image-wrapper {
-  position: relative;
-  flex-shrink: 0;
+  position: absolute;
   overflow: hidden;
   border: 0;
   padding: 0;
