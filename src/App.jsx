@@ -910,15 +910,18 @@ function App() {
         const wrapper = track.querySelector(`[data-image-id="${item.id}"]`);
         if (!wrapper) return;
 
-        const rect = wrapper.getBoundingClientRect();
-        const isVisible = rect.right > 0 && rect.left < window.innerWidth;
+        const layoutLeft = Number.parseFloat(item.layout.left);
+        const layoutWidth = Number.parseFloat(item.layout.width);
+        const screenLeft = layoutLeft - movement.distance;
+        const screenRight = screenLeft + layoutWidth;
+        const isVisible = screenRight > 0 && screenLeft < window.innerWidth;
         const isNearViewport =
-          rect.right > -preEntryDistance &&
-          rect.left < window.innerWidth + preEntryDistance;
+          screenRight > -preEntryDistance &&
+          screenLeft < window.innerWidth + preEntryDistance;
         const isAwayFromViewport =
-          rect.right < -preEntryDistance ||
-          rect.left > window.innerWidth + preEntryDistance;
-        const wrapperCenter = rect.left + rect.width / 2;
+          screenRight < -preEntryDistance ||
+          screenLeft > window.innerWidth + preEntryDistance;
+        const wrapperCenter = screenLeft + layoutWidth / 2;
         const viewportCenter = window.innerWidth / 2;
         const centerAmount =
           1 -
@@ -950,7 +953,7 @@ function App() {
 
           const initialStagger =
             wrapper.dataset.initialReveal === "true" && isVisible
-              ? clamp(rect.left / window.innerWidth, 0, 1) * 0.42
+              ? clamp(screenLeft / window.innerWidth, 0, 1) * 0.42
               : 0;
 
           gsap.fromTo(
@@ -986,40 +989,6 @@ function App() {
           animatedImages.has(item.id) &&
           wrapper.dataset.hasEntered === "true"
         ) {
-          const activeZIndex =
-            nextRelationshipProgress > 0.02
-              ? item.layout.relationshipMotion?.zIndex || item.layout.zIndex
-              : item.layout.zIndex;
-          const isBehindOverlappingImage = galleryItems.some((otherItem) => {
-            if (otherItem.id === item.id) return false;
-
-            const otherWrapper = track.querySelector(
-              `[data-image-id="${otherItem.id}"]`,
-            );
-            if (!otherWrapper || !animatedImages.has(otherItem.id)) {
-              return false;
-            }
-
-            const otherRect = otherWrapper.getBoundingClientRect();
-            const overlaps =
-              rect.left < otherRect.right &&
-              rect.right > otherRect.left &&
-              rect.top < otherRect.bottom &&
-              rect.bottom > otherRect.top;
-
-            if (!overlaps) return false;
-
-            const otherRelationshipProgress = Number(
-              otherWrapper.dataset.relationshipProgress || 0,
-            );
-            const otherZIndex =
-              otherRelationshipProgress > 0.02
-                ? otherItem.layout.relationshipMotion?.zIndex ||
-                  otherItem.layout.zIndex
-                : otherItem.layout.zIndex;
-
-            return otherZIndex > activeZIndex;
-          });
           const targetX = relationshipX;
           const targetY = relationshipY;
           const targetScale = centerScale;
@@ -1036,13 +1005,14 @@ function App() {
           wrapper.dataset.smoothScale = String(nextScale);
 
           gsap.set(wrapper, {
-            opacity: isBehindOverlappingImage
-              ? item.opacity * 0.8
-              : item.opacity,
+            opacity: item.opacity,
             x: nextX,
             y: nextY,
             scale: nextScale,
-            zIndex: activeZIndex,
+            zIndex:
+              nextRelationshipProgress > 0.02
+                ? item.layout.relationshipMotion?.zIndex || item.layout.zIndex
+                : item.layout.zIndex,
           });
         }
 
