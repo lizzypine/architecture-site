@@ -5,18 +5,38 @@ const allImages = [
   "/img/pexels-adrien-olichon-1257089-3137038.jpg",
   "/img/pexels-adrien-olichon-1257089-3137047.jpg",
   "/img/pexels-ai25studio-8837511.jpg",
+  "/img/pexels-airamdphoto-27675599.jpg",
   "/img/pexels-andrea-238542097-35392198.jpg",
   "/img/pexels-artbovich-11701113.jpg",
   "/img/pexels-artbovich-7166645.jpg",
   "/img/pexels-artbovich-7195739.jpg",
   "/img/pexels-artbovich-8089093.jpg",
   "/img/pexels-costa-17729218.jpg",
+  "/img/pexels-ezgi-arslanturk-karaman-48519538-11195363.jpg",
+  "/img/pexels-francesco-ungaro-2058168.jpg",
   "/img/pexels-ganiyevart-15153700.jpg",
+  "/img/pexels-googledeepmind-25626446.jpg",
+  "/img/pexels-itskhalidkhan-6259182.jpg",
+  "/img/pexels-ivan-s-4458200.jpg",
   "/img/pexels-ivan-s-4458205.jpg",
+  "/img/pexels-jonas-horsch-102497290-34303572.jpg",
+  "/img/pexels-laup-1816030.jpg",
+  "/img/pexels-macit-abdullah-2152400408-33643463.jpg",
+  "/img/pexels-magda-ehlers-pexels-35009410.jpg",
   "/img/pexels-perqued-10919427.jpg",
   "/img/pexels-perqued-9757618.jpg",
+  "/img/pexels-pixels-elements-16627387.jpg",
+  "/img/pexels-pth686817-20588914.jpg",
+  "/img/pexels-rethaferguson-3825540.jpg",
+  "/img/pexels-rushipatel1210-32654150.jpg",
   "/img/pexels-shvets-production-9052461.jpg",
+  "/img/pexels-sliceisop-2739074.jpg",
+  "/img/pexels-srcharls-35614239.jpg",
   "/img/pexels-thomas-parker-1272388137-31500951.jpg",
+  "/img/pexels-tima-miroshnichenko-6615234.jpg",
+  "/img/pexels-unlime-8262182.jpg",
+  "/img/pexels-yunuserentk-10026713.jpg",
+  "/img/pexels-zulfugarkarimov-33719839.jpg",
 ];
 
 const imageTags = {
@@ -30,7 +50,10 @@ const imageTags = {
 };
 
 const imageFocusEnabled = false;
-const galleryBatchWidth = 2520;
+const galleryBatchWidth = 1900;
+const galleryEdgeBleed = 190;
+const galleryCopiesPerBatch = 2;
+const masonryGap = 4;
 
 const clusterPlacements = [
   { axis: "x", direction: -1, distance: 1.08, scale: 0.38 },
@@ -75,95 +98,223 @@ function rectsOverlap(first, second, padding = 0) {
   );
 }
 
-function getRandomLayout(itemIndex, batchIndex, occupiedRects = []) {
+function rectCollides(rect, occupiedRects, padding = 0) {
+  return occupiedRects.some((existingRect) =>
+    rectsOverlap(rect, existingRect, padding),
+  );
+}
+
+function getMasonryMetrics(batchIndex) {
   const viewportHeight =
     typeof window === "undefined" ? 800 : window.innerHeight;
   const viewportPadding = Math.round(
-    Math.min(Math.max(viewportHeight * 0.08, 20), 72),
+    Math.min(Math.max(viewportHeight * 0.05, 18), 52),
   );
-  const headerClearance = 124;
+  const headerClearance = 188;
   const topPadding = Math.max(viewportPadding, headerClearance);
-  const bottomPadding = viewportPadding;
+  const bottomPadding = Math.max(viewportPadding, 184);
   const availableHeight = Math.max(
     80,
     viewportHeight - topPadding - bottomPadding,
   );
-  const minHeight = Math.min(88, availableHeight);
-  const maxHeight = Math.min(260, availableHeight);
-  const baseHeight = Math.round(getRandomBetween(minHeight, maxHeight));
-  const shouldBeSmall = Math.random() < 0.2;
-  const height = shouldBeSmall ? Math.round(baseHeight * 0.6) : baseHeight;
-  const aspectRatios = [0.62, 0.72, 0.82, 0.95, 1.08, 1.25, 1.48, 1.72];
-  const aspectRatio =
-    aspectRatios[Math.floor(Math.random() * aspectRatios.length)];
-  const width = Math.round(height * aspectRatio);
-  const maxTop = viewportHeight - bottomPadding - height;
-  const laneIndex = itemIndex % 3;
-  const laneRanges = [
-    [0, 0.24],
-    [0.36, 0.58],
-    [0.72, 1],
+  const rowCount = viewportHeight < 700 ? 5 : 6;
+  const cellSize = Math.floor(
+    (availableHeight - masonryGap * (rowCount - 1)) / rowCount,
+  );
+
+  return {
+    batchBaseX: batchIndex * galleryBatchWidth - galleryEdgeBleed,
+    cellSize: clamp(cellSize, 54, 104),
+    rowCount,
+    topPadding,
+  };
+}
+
+function getMasonryFormat(itemIndex) {
+  const spanPattern = itemIndex % 24;
+
+  const formats = [
+    { columns: 1, rows: 1, widthScale: 0.82, heightScale: 0.58 },
+    { columns: 2, rows: 1, widthScale: 1, heightScale: 0.86 },
+    { columns: 1, rows: 1, widthScale: 0.68, heightScale: 0.98 },
+    { columns: 2, rows: 2, widthScale: 0.94, heightScale: 0.92 },
+    { columns: 1, rows: 1, widthScale: 0.7, heightScale: 0.68 },
+    { columns: 1, rows: 2, widthScale: 0.9, heightScale: 1 },
+    { columns: 1, rows: 1, widthScale: 0.84, heightScale: 0.56 },
+    { columns: 1, rows: 1, widthScale: 1, heightScale: 0.78 },
+    { columns: 2, rows: 1, widthScale: 1, heightScale: 0.8 },
+    { columns: 3, rows: 1, widthScale: 1, heightScale: 0.78 },
+    { columns: 1, rows: 1, widthScale: 0.62, heightScale: 0.62 },
+    { columns: 3, rows: 2, widthScale: 0.9, heightScale: 0.88 },
+    { columns: 1, rows: 1, widthScale: 0.72, heightScale: 1 },
+    { columns: 1, rows: 2, widthScale: 0.84, heightScale: 1 },
+    { columns: 1, rows: 1, widthScale: 0.94, heightScale: 0.94 },
+    { columns: 1, rows: 1, widthScale: 0.88, heightScale: 0.58 },
+    { columns: 2, rows: 1, widthScale: 0.96, heightScale: 0.84 },
+    { columns: 1, rows: 1, widthScale: 0.62, heightScale: 0.7 },
+    { columns: 1, rows: 1, widthScale: 1, heightScale: 1 },
+    { columns: 2, rows: 2, widthScale: 0.9, heightScale: 0.86 },
+    { columns: 1, rows: 1, widthScale: 0.78, heightScale: 0.58 },
+    { columns: 2, rows: 1, widthScale: 0.96, heightScale: 0.7 },
+    { columns: 1, rows: 1, widthScale: 0.74, heightScale: 0.9 },
+    { columns: 2, rows: 1, widthScale: 0.9, heightScale: 0.88 },
   ];
-  const [laneStart, laneEnd] = laneRanges[laneIndex % laneRanges.length];
-  const laneTopStart = topPadding + (maxTop - topPadding) * laneStart;
-  const laneTopEnd = topPadding + (maxTop - topPadding) * laneEnd;
-  const clusterIndex = Math.floor(itemIndex / 3);
-  const clusterBaseX = batchIndex * galleryBatchWidth + clusterIndex * 420;
-  const laneXOffsets = [-80, 90, 260];
-  let left = clusterBaseX + laneXOffsets[laneIndex] + 140;
-  let top = getRandomBetween(laneTopStart, laneTopEnd);
 
-  for (let attempt = 0; attempt < 72; attempt += 1) {
-    const candidateLeft =
-      clusterBaseX +
-      laneXOffsets[laneIndex] +
-      getRandomBetween(-90, 130) +
-      140;
-    const candidateTop = getRandomBetween(laneTopStart, laneTopEnd);
-    const candidateRect = {
-      left: candidateLeft,
-      top: candidateTop,
-      width,
-      height,
-    };
+  return formats[spanPattern];
+}
 
-    if (
-      !occupiedRects.some((existingRect) =>
-        rectsOverlap(candidateRect, existingRect, 56),
-      )
-    ) {
-      left = candidateLeft;
-      top = candidateTop;
-      break;
+function canPlaceMasonryItem(occupiedCells, column, row, span, rowCount) {
+  if (row + span.rows > rowCount) return false;
+
+  for (let columnOffset = 0; columnOffset < span.columns; columnOffset += 1) {
+    for (let rowOffset = 0; rowOffset < span.rows; rowOffset += 1) {
+      if (occupiedCells[`${column + columnOffset}-${row + rowOffset}`]) {
+        return false;
+      }
     }
   }
 
-  let resolvedRect = {
-    left,
-    top,
-    width,
-    height,
-  };
+  return true;
+}
 
-  while (
-    occupiedRects.some((existingRect) =>
-      rectsOverlap(resolvedRect, existingRect, 56),
-    )
-  ) {
-    left += 56;
-    resolvedRect = {
-      ...resolvedRect,
-      left,
-    };
+function placeMasonryItem(occupiedCells, column, row, span) {
+  for (let columnOffset = 0; columnOffset < span.columns; columnOffset += 1) {
+    for (let rowOffset = 0; rowOffset < span.rows; rowOffset += 1) {
+      occupiedCells[`${column + columnOffset}-${row + rowOffset}`] = true;
+    }
   }
+}
+
+function getMasonrySlot(
+  occupiedCells,
+  span,
+  rowCount,
+  itemIndex,
+  preferredRows = null,
+) {
+  const rowOrder =
+    preferredRows ||
+    shuffleArray(
+      Array.from({ length: rowCount - span.rows + 1 }, (_, index) => index),
+    );
+
+  for (let column = 0; column < 40; column += 1) {
+    for (const row of rowOrder) {
+      if (canPlaceMasonryItem(occupiedCells, column, row, span, rowCount)) {
+        return { column, row };
+      }
+    }
+  }
+
+  return {
+    column: Math.floor(itemIndex / rowCount),
+    row: itemIndex % rowCount,
+  };
+}
+
+function getWhitespaceReach(itemIndex) {
+  const reachPattern = itemIndex % 36;
+
+  if ([4, 29].includes(reachPattern)) return -64;
+  if ([17, 34].includes(reachPattern)) return 64;
+
+  return 0;
+}
+
+function resolveVisualRect(initialRect, occupiedRects) {
+  const horizontalOffsets = [0, 8, -8, 16, -16, 28, -28, 44, -44, 64, -64];
+  const verticalOffsets = [0, 8, -8, 16, -16, 28, -28, 40, -40];
+
+  for (const offsetX of horizontalOffsets) {
+    for (const offsetY of verticalOffsets) {
+      const candidateRect = {
+        ...initialRect,
+        left: initialRect.left + offsetX,
+        top: initialRect.top + offsetY,
+      };
+
+      if (!rectCollides(candidateRect, occupiedRects, 3)) {
+        return candidateRect;
+      }
+    }
+  }
+
+  for (let step = 1; step <= 120; step += 1) {
+    for (const offsetY of verticalOffsets) {
+      const candidateRect = {
+        ...initialRect,
+        left: initialRect.left + step * 12,
+        top: initialRect.top + offsetY,
+      };
+
+      if (!rectCollides(candidateRect, occupiedRects, 3)) {
+        return candidateRect;
+      }
+    }
+  }
+
+  return initialRect;
+}
+
+function getMasonryLayout(itemIndex, batchIndex, occupiedCells, occupiedRects) {
+  const metrics = getMasonryMetrics(batchIndex);
+  const originalFormat = getMasonryFormat(itemIndex);
+  const format =
+    originalFormat.rows > metrics.rowCount
+      ? { ...originalFormat, rows: 1, heightScale: originalFormat.widthScale }
+      : originalFormat;
+  const reach = getWhitespaceReach(itemIndex);
+  const preferredRows =
+    reach < 0
+      ? [0]
+      : reach > 0
+        ? [Math.max(0, metrics.rowCount - format.rows)]
+        : null;
+  const slot = getMasonrySlot(
+    occupiedCells,
+    format,
+    metrics.rowCount,
+    itemIndex,
+    preferredRows,
+  );
+  placeMasonryItem(occupiedCells, slot.column, slot.row, format);
+
+  const width =
+    metrics.cellSize * format.columns + masonryGap * (format.columns - 1);
+  const height =
+    metrics.cellSize * format.rows + masonryGap * (format.rows - 1);
+  const scaledWidth = Math.round(width * format.widthScale);
+  const scaledHeight = Math.round(height * format.heightScale);
+  const insetX = (width - scaledWidth) * ((itemIndex % 3) / 2);
+  const insetY = (height - scaledHeight) * (((itemIndex + 1) % 3) / 2);
+  const left =
+    metrics.batchBaseX +
+    slot.column * (metrics.cellSize + masonryGap) +
+    insetX +
+    getRandomBetween(-6, 6);
+  const top =
+    metrics.topPadding +
+    slot.row * (metrics.cellSize + masonryGap) +
+    insetY +
+    reach +
+    getRandomBetween(-7, 7);
+  const resolvedRect = resolveVisualRect(
+    {
+      left,
+      top,
+      width: scaledWidth,
+      height: scaledHeight,
+    },
+    occupiedRects,
+  );
 
   const shouldRelationshipMove = false;
 
   return {
-    width: `${width}px`,
-    height: `${height}px`,
-    left: `${Math.round(left)}px`,
-    top: `${Math.round(top)}px`,
+    width: `${scaledWidth}px`,
+    height: `${scaledHeight}px`,
+    left: `${Math.round(resolvedRect.left)}px`,
+    top: `${Math.round(resolvedRect.top)}px`,
     relationshipMotion: shouldRelationshipMove
       ? {
           targetX: getRandomBetween(8, 18) * (Math.random() < 0.5 ? -1 : 1),
@@ -176,8 +327,7 @@ function getRandomLayout(itemIndex, batchIndex, occupiedRects = []) {
 }
 
 function getRandomOpacity() {
-  const opacities = [0.5, 0.6, 0.65, 0.7, 0.75, 0.8, 0.85, 0.9, 0.95, 1];
-  return opacities[Math.floor(Math.random() * opacities.length)];
+  return 1;
 }
 
 function getRandomImageMotion() {
@@ -188,8 +338,18 @@ function getRandomImageMotion() {
 }
 
 function createGalleryBatch(batchIndex, occupiedRects = []) {
-  return shuffleArray(allImages).map((src, itemIndex) => {
-    const layout = getRandomLayout(itemIndex, batchIndex, occupiedRects);
+  const batchImages = shuffleArray(
+    Array.from({ length: galleryCopiesPerBatch }, () => allImages).flat(),
+  );
+  const occupiedCells = {};
+
+  return batchImages.map((src, itemIndex) => {
+    const layout = getMasonryLayout(
+      itemIndex,
+      batchIndex,
+      occupiedCells,
+      occupiedRects,
+    );
 
     occupiedRects.push({
       left: Number.parseFloat(layout.left),
