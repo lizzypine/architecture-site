@@ -110,7 +110,7 @@ function getMasonryMetrics(batchIndex) {
   const viewportPadding = Math.round(
     Math.min(Math.max(viewportHeight * 0.05, 18), 52),
   );
-  const headerClearance = 188;
+  const headerClearance = 216;
   const topPadding = Math.max(viewportPadding, headerClearance);
   const bottomPadding = Math.max(viewportPadding, 184);
   const availableHeight = Math.max(
@@ -215,7 +215,7 @@ function getMasonrySlot(
 function getWhitespaceReach(itemIndex) {
   const reachPattern = itemIndex % 36;
 
-  if ([4, 29].includes(reachPattern)) return -64;
+  if ([4, 29].includes(reachPattern)) return -36;
   if ([17, 34].includes(reachPattern)) return 64;
 
   return 0;
