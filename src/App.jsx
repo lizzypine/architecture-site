@@ -81,7 +81,7 @@ function getRandomLayout(itemIndex, batchIndex, occupiedRects = []) {
   const viewportPadding = Math.round(
     Math.min(Math.max(viewportHeight * 0.08, 20), 72),
   );
-  const headerClearance = 104;
+  const headerClearance = 124;
   const topPadding = Math.max(viewportPadding, headerClearance);
   const bottomPadding = viewportPadding;
   const availableHeight = Math.max(
@@ -1015,11 +1015,19 @@ function App() {
     <div className="app-shell">
       <header className="site-header">
         <div className="brand">[ urbānum ]</div>
-        <button className="menu-toggle" aria-label="Menu">
-          <span />
-          <span />
-          <span />
-        </button>
+        <nav className="top-menu" aria-label="Gallery navigation">
+          <div className="top-menu__group" aria-label="Browse tools">
+            <button type="button" className="text-control text-control--active">
+              Filter
+            </button>
+            <button type="button" className="text-control text-control--muted">
+              Search
+            </button>
+          </div>
+          <button type="button" className="text-control text-control--active">
+            Menu
+          </button>
+        </nav>
       </header>
 
       <div className="scroll-container" ref={scrollContainerRef}>
@@ -1065,6 +1073,15 @@ function App() {
             ))}
           </div>
         </div>
+      </div>
+
+      <div className="zoom-controls" aria-label="Zoom controls">
+        <button type="button" className="zoom-control" aria-label="Zoom out">
+          -
+        </button>
+        <button type="button" className="zoom-control" aria-label="Zoom in">
+          +
+        </button>
       </div>
 
       <button
