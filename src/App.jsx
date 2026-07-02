@@ -1144,7 +1144,7 @@ function App() {
   return (
     <div className="app-shell">
       <header className="site-header">
-        <div className="brand">[ urbānum ]</div>
+        <img className="brand" src="/urbanum-logo.jpg" alt="urbānum" />
         <nav className="top-menu" aria-label="Gallery navigation">
           <div className="top-menu__group" aria-label="Browse tools">
             <button type="button" className="text-control text-control--active">

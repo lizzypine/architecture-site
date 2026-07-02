@@ -51,23 +51,20 @@ body {
 
 .brand {
   position: absolute;
-  top: 14px;
+  top: 13px;
   left: 50%;
   transform: translateX(-50%);
-  font-family: "Courier New", Courier, monospace;
-  font-size: clamp(1.5rem, 2.8vw, 2.35rem);
-  font-weight: 330;
-  line-height: 1;
-  letter-spacing: 0.2em;
-  color: #050505;
-  white-space: nowrap;
+  display: block;
+  width: clamp(250px, 19vw, 360px);
+  height: auto;
+  pointer-events: none;
 }
 
 .top-menu {
   position: absolute;
   top: 76px;
-  left: 28px;
-  right: 28px;
+  left: clamp(44px, 2.8vw, 58px);
+  right: clamp(44px, 2.8vw, 58px);
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -453,14 +450,14 @@ body {
   }
 
   .brand {
-    font-size: 1.3rem;
-    letter-spacing: 0.12em;
+    top: 16px;
+    width: min(240px, 58vw);
   }
 
   .top-menu {
     top: 66px;
-    left: 18px;
-    right: 18px;
+    left: 24px;
+    right: 24px;
   }
 
   .top-menu__group {
