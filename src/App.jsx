@@ -228,12 +228,15 @@ function getMasonrySlot(
 }
 
 function getWhitespaceReach(itemIndex, isCompactViewport = false) {
-  if (isCompactViewport) return 0;
-
   const reachPattern = itemIndex % 36;
 
-  if ([4, 29].includes(reachPattern)) return -36;
-  if ([17, 34].includes(reachPattern)) return 64;
+  if ([4, 29].includes(reachPattern)) {
+    return isCompactViewport ? -18 : -36;
+  }
+
+  if ([17, 34].includes(reachPattern)) {
+    return isCompactViewport ? 28 : 64;
+  }
 
   return 0;
 }
