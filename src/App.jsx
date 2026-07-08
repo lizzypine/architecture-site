@@ -50,7 +50,7 @@ const imageTags = {
 };
 
 const imageFocusEnabled = false;
-const galleryBatchWidth = 1900;
+const galleryBatchWidth = 1760;
 const galleryEdgeBleed = 190;
 const galleryCopiesPerBatch = 2;
 const masonryGap = 4;
@@ -107,12 +107,22 @@ function rectCollides(rect, occupiedRects, padding = 0) {
 function getMasonryMetrics(batchIndex) {
   const viewportHeight =
     typeof window === "undefined" ? 800 : window.innerHeight;
+  const viewportWidth =
+    typeof window === "undefined" ? 1200 : window.innerWidth;
   const viewportPadding = Math.round(
     Math.min(Math.max(viewportHeight * 0.05, 18), 52),
   );
-  const headerClearance = 216;
+  const isCompactViewport = viewportWidth < 1000 || viewportHeight < 760;
+  const headerClearance = Math.round(
+    isCompactViewport
+      ? clamp(viewportHeight * 0.27, 170, 230)
+      : clamp(viewportHeight * 0.22, 142, 216),
+  );
   const topPadding = Math.max(viewportPadding, headerClearance);
-  const bottomPadding = Math.max(viewportPadding, 184);
+  const bottomControlClearance = Math.round(
+    clamp(viewportHeight * 0.2, 116, 184),
+  );
+  const bottomPadding = Math.max(viewportPadding, bottomControlClearance);
   const availableHeight = Math.max(
     80,
     viewportHeight - topPadding - bottomPadding,
@@ -123,8 +133,13 @@ function getMasonryMetrics(batchIndex) {
   );
 
   return {
-    batchBaseX: batchIndex * galleryBatchWidth - galleryEdgeBleed,
+    batchBaseX:
+      batchIndex *
+        Math.round(clamp(viewportWidth * 1.08, 1260, galleryBatchWidth)) -
+      galleryEdgeBleed,
     cellSize: clamp(cellSize, 54, 104),
+    galleryBottom: viewportHeight - bottomPadding,
+    isCompactViewport,
     rowCount,
     topPadding,
   };
@@ -212,7 +227,9 @@ function getMasonrySlot(
   };
 }
 
-function getWhitespaceReach(itemIndex) {
+function getWhitespaceReach(itemIndex, isCompactViewport = false) {
+  if (isCompactViewport) return 0;
+
   const reachPattern = itemIndex % 36;
 
   if ([4, 29].includes(reachPattern)) return -36;
@@ -221,9 +238,11 @@ function getWhitespaceReach(itemIndex) {
   return 0;
 }
 
-function resolveVisualRect(initialRect, occupiedRects) {
+function resolveVisualRect(initialRect, occupiedRects, bounds = {}) {
   const horizontalOffsets = [0, 8, -8, 16, -16, 28, -28, 44, -44, 64, -64];
   const verticalOffsets = [0, 8, -8, 16, -16, 28, -28, 40, -40];
+  const minTop = bounds.minTop ?? -Infinity;
+  const maxBottom = bounds.maxBottom ?? Infinity;
 
   for (const offsetX of horizontalOffsets) {
     for (const offsetY of verticalOffsets) {
@@ -232,6 +251,13 @@ function resolveVisualRect(initialRect, occupiedRects) {
         left: initialRect.left + offsetX,
         top: initialRect.top + offsetY,
       };
+
+      if (
+        candidateRect.top < minTop ||
+        candidateRect.top + candidateRect.height > maxBottom
+      ) {
+        continue;
+      }
 
       if (!rectCollides(candidateRect, occupiedRects, 3)) {
         return candidateRect;
@@ -246,6 +272,13 @@ function resolveVisualRect(initialRect, occupiedRects) {
         left: initialRect.left + step * 12,
         top: initialRect.top + offsetY,
       };
+
+      if (
+        candidateRect.top < minTop ||
+        candidateRect.top + candidateRect.height > maxBottom
+      ) {
+        continue;
+      }
 
       if (!rectCollides(candidateRect, occupiedRects, 3)) {
         return candidateRect;
@@ -263,7 +296,7 @@ function getMasonryLayout(itemIndex, batchIndex, occupiedCells, occupiedRects) {
     originalFormat.rows > metrics.rowCount
       ? { ...originalFormat, rows: 1, heightScale: originalFormat.widthScale }
       : originalFormat;
-  const reach = getWhitespaceReach(itemIndex);
+  const reach = getWhitespaceReach(itemIndex, metrics.isCompactViewport);
   const preferredRows =
     reach < 0
       ? [0]
@@ -306,6 +339,10 @@ function getMasonryLayout(itemIndex, batchIndex, occupiedCells, occupiedRects) {
       height: scaledHeight,
     },
     occupiedRects,
+    {
+      maxBottom: metrics.galleryBottom + Math.max(reach, 0) + 4,
+      minTop: metrics.topPadding + Math.min(reach, 0) - 4,
+    },
   );
 
   const shouldRelationshipMove = false;

@@ -43,28 +43,28 @@ body {
   left: 0;
   right: 0;
   z-index: 1200;
-  height: 112px;
-  padding: 17px 28px 0;
+  height: clamp(86px, 10vw, 112px);
+  padding: clamp(12px, 1.45vw, 17px) clamp(18px, 2vw, 28px) 0;
   background: transparent;
   pointer-events: none;
 }
 
 .brand {
   position: absolute;
-  top: 13px;
+  top: clamp(11px, 1.25vw, 13px);
   left: 50%;
   transform: translateX(-50%);
   display: block;
-  width: clamp(250px, 19vw, 360px);
+  width: clamp(158px, 19vw, 360px);
   height: auto;
   pointer-events: none;
 }
 
 .top-menu {
   position: absolute;
-  top: 76px;
-  left: clamp(44px, 2.8vw, 58px);
-  right: clamp(44px, 2.8vw, 58px);
+  top: clamp(58px, 6.8vw, 76px);
+  left: clamp(24px, 2.8vw, 58px);
+  right: clamp(24px, 2.8vw, 58px);
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -74,7 +74,7 @@ body {
 .top-menu__group {
   display: flex;
   align-items: center;
-  gap: clamp(1.1rem, 2.3vw, 1.65rem);
+  gap: clamp(0.8rem, 2.3vw, 1.65rem);
 }
 
 .text-control {
@@ -84,7 +84,7 @@ body {
   cursor: pointer;
   padding: 0;
   font: inherit;
-  font-size: clamp(1rem, 1.55vw, 1.45rem);
+  font-size: clamp(0.82rem, 1.45vw, 1.45rem);
   font-weight: 800;
   line-height: 1;
   letter-spacing: 0.28em;
@@ -247,11 +247,11 @@ body {
 .zoom-controls {
   position: fixed;
   left: 50%;
-  bottom: 20px;
+  bottom: clamp(14px, 2vw, 20px);
   z-index: 1200;
   display: grid;
-  grid-template-columns: repeat(2, 54px);
-  height: 54px;
+  grid-template-columns: repeat(2, clamp(38px, 4.4vw, 54px));
+  height: clamp(38px, 4.4vw, 54px);
   transform: translateX(-50%);
   border: 1px solid rgba(5, 5, 5, 0.58);
   background: rgba(255, 255, 255, 0.88);
@@ -260,8 +260,8 @@ body {
 .zoom-control {
   display: grid;
   place-items: center;
-  width: 54px;
-  height: 52px;
+  width: clamp(38px, 4.4vw, 54px);
+  height: calc(clamp(38px, 4.4vw, 54px) - 2px);
   border: 0;
   border-right: 1px solid rgba(5, 5, 5, 0.58);
   border-radius: 0;
@@ -269,7 +269,7 @@ body {
   color: rgba(5, 5, 5, 0.72);
   cursor: pointer;
   font: inherit;
-  font-size: 1.45rem;
+  font-size: clamp(1rem, 1.8vw, 1.45rem);
   font-weight: 300;
   line-height: 1;
 }
@@ -445,17 +445,17 @@ body {
 
 @media (max-width: 640px) {
   .site-header {
-    height: 98px;
-    padding: 14px 18px 0;
+    height: 86px;
+    padding: 12px 18px 0;
   }
 
   .brand {
-    top: 16px;
-    width: min(240px, 58vw);
+    top: 14px;
+    width: min(200px, 58vw);
   }
 
   .top-menu {
-    top: 66px;
+    top: 60px;
     left: 24px;
     right: 24px;
   }
@@ -465,19 +465,8 @@ body {
   }
 
   .text-control {
-    font-size: 0.88rem;
-    letter-spacing: 0.18em;
-  }
-
-  .zoom-controls {
-    grid-template-columns: repeat(2, 46px);
-    height: 46px;
-  }
-
-  .zoom-control {
-    width: 46px;
-    height: 44px;
-    font-size: 1.2rem;
+    font-size: clamp(0.72rem, 2.8vw, 0.88rem);
+    letter-spacing: 0.16em;
   }
 
   .entry-card {
