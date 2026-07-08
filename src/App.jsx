@@ -5,18 +5,38 @@ const allImages = [
   "/img/pexels-adrien-olichon-1257089-3137038.jpg",
   "/img/pexels-adrien-olichon-1257089-3137047.jpg",
   "/img/pexels-ai25studio-8837511.jpg",
+  "/img/pexels-airamdphoto-27675599.jpg",
   "/img/pexels-andrea-238542097-35392198.jpg",
   "/img/pexels-artbovich-11701113.jpg",
   "/img/pexels-artbovich-7166645.jpg",
   "/img/pexels-artbovich-7195739.jpg",
   "/img/pexels-artbovich-8089093.jpg",
   "/img/pexels-costa-17729218.jpg",
+  "/img/pexels-ezgi-arslanturk-karaman-48519538-11195363.jpg",
+  "/img/pexels-francesco-ungaro-2058168.jpg",
   "/img/pexels-ganiyevart-15153700.jpg",
+  "/img/pexels-googledeepmind-25626446.jpg",
+  "/img/pexels-itskhalidkhan-6259182.jpg",
+  "/img/pexels-ivan-s-4458200.jpg",
   "/img/pexels-ivan-s-4458205.jpg",
+  "/img/pexels-jonas-horsch-102497290-34303572.jpg",
+  "/img/pexels-laup-1816030.jpg",
+  "/img/pexels-macit-abdullah-2152400408-33643463.jpg",
+  "/img/pexels-magda-ehlers-pexels-35009410.jpg",
   "/img/pexels-perqued-10919427.jpg",
   "/img/pexels-perqued-9757618.jpg",
+  "/img/pexels-pixels-elements-16627387.jpg",
+  "/img/pexels-pth686817-20588914.jpg",
+  "/img/pexels-rethaferguson-3825540.jpg",
+  "/img/pexels-rushipatel1210-32654150.jpg",
   "/img/pexels-shvets-production-9052461.jpg",
+  "/img/pexels-sliceisop-2739074.jpg",
+  "/img/pexels-srcharls-35614239.jpg",
   "/img/pexels-thomas-parker-1272388137-31500951.jpg",
+  "/img/pexels-tima-miroshnichenko-6615234.jpg",
+  "/img/pexels-unlime-8262182.jpg",
+  "/img/pexels-yunuserentk-10026713.jpg",
+  "/img/pexels-zulfugarkarimov-33719839.jpg",
 ];
 
 const imageTags = {
@@ -30,6 +50,10 @@ const imageTags = {
 };
 
 const imageFocusEnabled = false;
+const galleryBatchWidth = 1760;
+const galleryEdgeBleed = 190;
+const galleryCopiesPerBatch = 2;
+const masonryGap = 4;
 
 const clusterPlacements = [
   { axis: "x", direction: -1, distance: 1.08, scale: 0.38 },
@@ -65,50 +89,272 @@ function getRandomBetween(min, max) {
   return Math.random() * (max - min) + min;
 }
 
-function getRandomLayout(laneIndex) {
+function rectsOverlap(first, second, padding = 0) {
+  return (
+    first.left < second.left + second.width + padding &&
+    first.left + first.width + padding > second.left &&
+    first.top < second.top + second.height + padding &&
+    first.top + first.height + padding > second.top
+  );
+}
+
+function rectCollides(rect, occupiedRects, padding = 0) {
+  return occupiedRects.some((existingRect) =>
+    rectsOverlap(rect, existingRect, padding),
+  );
+}
+
+function getMasonryMetrics(batchIndex) {
   const viewportHeight =
     typeof window === "undefined" ? 800 : window.innerHeight;
+  const viewportWidth =
+    typeof window === "undefined" ? 1200 : window.innerWidth;
   const viewportPadding = Math.round(
-    Math.min(Math.max(viewportHeight * 0.08, 20), 72),
+    Math.min(Math.max(viewportHeight * 0.05, 18), 52),
   );
-  const headerClearance = 104;
+  const isCompactViewport = viewportWidth < 1000 || viewportHeight < 760;
+  const headerClearance = Math.round(
+    isCompactViewport
+      ? clamp(viewportHeight * 0.27, 170, 230)
+      : clamp(viewportHeight * 0.22, 142, 216),
+  );
   const topPadding = Math.max(viewportPadding, headerClearance);
-  const bottomPadding = viewportPadding;
+  const bottomControlClearance = Math.round(
+    clamp(viewportHeight * 0.2, 116, 184),
+  );
+  const bottomPadding = Math.max(viewportPadding, bottomControlClearance);
   const availableHeight = Math.max(
     80,
     viewportHeight - topPadding - bottomPadding,
   );
-  const minHeight = Math.min(112, availableHeight);
-  const maxHeight = Math.min(292, availableHeight);
-  const baseHeight = Math.round(getRandomBetween(minHeight, maxHeight));
-  const shouldBeSmall = Math.random() < 0.2;
-  const height = shouldBeSmall ? Math.round(baseHeight * 0.6) : baseHeight;
-  const aspectRatios = [0.62, 0.72, 0.82, 0.95, 1.08, 1.25, 1.48, 1.72];
-  const aspectRatio =
-    aspectRatios[Math.floor(Math.random() * aspectRatios.length)];
-  const width = Math.round(height * aspectRatio);
-  const maxTop = viewportHeight - bottomPadding - height;
-  const laneRanges = [
-    [0, 0.24],
-    [0.36, 0.58],
-    [0.72, 1],
-  ];
-  const [laneStart, laneEnd] = laneRanges[laneIndex % laneRanges.length];
-  const laneTopStart = topPadding + (maxTop - topPadding) * laneStart;
-  const laneTopEnd = topPadding + (maxTop - topPadding) * laneEnd;
-  const shouldOverlap = Math.random() < 0.2;
-  const overlapMin = Math.min(width * 0.18, 54);
-  const overlapMax = Math.min(width * 0.42, 120);
-  const gap = shouldOverlap
-    ? getRandomBetween(-overlapMax, -overlapMin)
-    : getRandomBetween(6, 46);
-  const shouldRelationshipMove = Math.random() < 0.25;
+  const rowCount = viewportHeight < 700 ? 5 : 6;
+  const cellSize = Math.floor(
+    (availableHeight - masonryGap * (rowCount - 1)) / rowCount,
+  );
 
   return {
-    width: `${width}px`,
-    height: `${height}px`,
-    top: `${Math.round(getRandomBetween(laneTopStart, laneTopEnd))}px`,
-    gap: `${Math.round(gap)}px`,
+    batchBaseX:
+      batchIndex *
+        Math.round(clamp(viewportWidth * 1.08, 1260, galleryBatchWidth)) -
+      galleryEdgeBleed,
+    cellSize: clamp(cellSize, 54, 104),
+    galleryBottom: viewportHeight - bottomPadding,
+    isCompactViewport,
+    rowCount,
+    topPadding,
+  };
+}
+
+function getMasonryFormat(itemIndex) {
+  const spanPattern = itemIndex % 24;
+
+  const formats = [
+    { columns: 1, rows: 1, widthScale: 0.82, heightScale: 0.58 },
+    { columns: 2, rows: 1, widthScale: 1, heightScale: 0.86 },
+    { columns: 1, rows: 1, widthScale: 0.68, heightScale: 0.98 },
+    { columns: 2, rows: 2, widthScale: 0.94, heightScale: 0.92 },
+    { columns: 1, rows: 1, widthScale: 0.7, heightScale: 0.68 },
+    { columns: 1, rows: 2, widthScale: 0.9, heightScale: 1 },
+    { columns: 1, rows: 1, widthScale: 0.84, heightScale: 0.56 },
+    { columns: 1, rows: 1, widthScale: 1, heightScale: 0.78 },
+    { columns: 2, rows: 1, widthScale: 1, heightScale: 0.8 },
+    { columns: 3, rows: 1, widthScale: 1, heightScale: 0.78 },
+    { columns: 1, rows: 1, widthScale: 0.62, heightScale: 0.62 },
+    { columns: 3, rows: 2, widthScale: 0.9, heightScale: 0.88 },
+    { columns: 1, rows: 1, widthScale: 0.72, heightScale: 1 },
+    { columns: 1, rows: 2, widthScale: 0.84, heightScale: 1 },
+    { columns: 1, rows: 1, widthScale: 0.94, heightScale: 0.94 },
+    { columns: 1, rows: 1, widthScale: 0.88, heightScale: 0.58 },
+    { columns: 2, rows: 1, widthScale: 0.96, heightScale: 0.84 },
+    { columns: 1, rows: 1, widthScale: 0.62, heightScale: 0.7 },
+    { columns: 1, rows: 1, widthScale: 1, heightScale: 1 },
+    { columns: 2, rows: 2, widthScale: 0.9, heightScale: 0.86 },
+    { columns: 1, rows: 1, widthScale: 0.78, heightScale: 0.58 },
+    { columns: 2, rows: 1, widthScale: 0.96, heightScale: 0.7 },
+    { columns: 1, rows: 1, widthScale: 0.74, heightScale: 0.9 },
+    { columns: 2, rows: 1, widthScale: 0.9, heightScale: 0.88 },
+  ];
+
+  return formats[spanPattern];
+}
+
+function canPlaceMasonryItem(occupiedCells, column, row, span, rowCount) {
+  if (row + span.rows > rowCount) return false;
+
+  for (let columnOffset = 0; columnOffset < span.columns; columnOffset += 1) {
+    for (let rowOffset = 0; rowOffset < span.rows; rowOffset += 1) {
+      if (occupiedCells[`${column + columnOffset}-${row + rowOffset}`]) {
+        return false;
+      }
+    }
+  }
+
+  return true;
+}
+
+function placeMasonryItem(occupiedCells, column, row, span) {
+  for (let columnOffset = 0; columnOffset < span.columns; columnOffset += 1) {
+    for (let rowOffset = 0; rowOffset < span.rows; rowOffset += 1) {
+      occupiedCells[`${column + columnOffset}-${row + rowOffset}`] = true;
+    }
+  }
+}
+
+function getMasonrySlot(
+  occupiedCells,
+  span,
+  rowCount,
+  itemIndex,
+  preferredRows = null,
+) {
+  const rowOrder =
+    preferredRows ||
+    shuffleArray(
+      Array.from({ length: rowCount - span.rows + 1 }, (_, index) => index),
+    );
+
+  for (let column = 0; column < 40; column += 1) {
+    for (const row of rowOrder) {
+      if (canPlaceMasonryItem(occupiedCells, column, row, span, rowCount)) {
+        return { column, row };
+      }
+    }
+  }
+
+  return {
+    column: Math.floor(itemIndex / rowCount),
+    row: itemIndex % rowCount,
+  };
+}
+
+function getWhitespaceReach(itemIndex, isCompactViewport = false) {
+  const reachPattern = itemIndex % 36;
+
+  if ([4, 29].includes(reachPattern)) {
+    return isCompactViewport ? -18 : -36;
+  }
+
+  if ([17, 34].includes(reachPattern)) {
+    return isCompactViewport ? 28 : 64;
+  }
+
+  return 0;
+}
+
+function resolveVisualRect(initialRect, occupiedRects, bounds = {}) {
+  const horizontalOffsets = [0, 8, -8, 16, -16, 28, -28, 44, -44, 64, -64];
+  const verticalOffsets = [0, 8, -8, 16, -16, 28, -28, 40, -40];
+  const minTop = bounds.minTop ?? -Infinity;
+  const maxBottom = bounds.maxBottom ?? Infinity;
+
+  for (const offsetX of horizontalOffsets) {
+    for (const offsetY of verticalOffsets) {
+      const candidateRect = {
+        ...initialRect,
+        left: initialRect.left + offsetX,
+        top: initialRect.top + offsetY,
+      };
+
+      if (
+        candidateRect.top < minTop ||
+        candidateRect.top + candidateRect.height > maxBottom
+      ) {
+        continue;
+      }
+
+      if (!rectCollides(candidateRect, occupiedRects, 3)) {
+        return candidateRect;
+      }
+    }
+  }
+
+  for (let step = 1; step <= 120; step += 1) {
+    for (const offsetY of verticalOffsets) {
+      const candidateRect = {
+        ...initialRect,
+        left: initialRect.left + step * 12,
+        top: initialRect.top + offsetY,
+      };
+
+      if (
+        candidateRect.top < minTop ||
+        candidateRect.top + candidateRect.height > maxBottom
+      ) {
+        continue;
+      }
+
+      if (!rectCollides(candidateRect, occupiedRects, 3)) {
+        return candidateRect;
+      }
+    }
+  }
+
+  return initialRect;
+}
+
+function getMasonryLayout(itemIndex, batchIndex, occupiedCells, occupiedRects) {
+  const metrics = getMasonryMetrics(batchIndex);
+  const originalFormat = getMasonryFormat(itemIndex);
+  const format =
+    originalFormat.rows > metrics.rowCount
+      ? { ...originalFormat, rows: 1, heightScale: originalFormat.widthScale }
+      : originalFormat;
+  const reach = getWhitespaceReach(itemIndex, metrics.isCompactViewport);
+  const preferredRows =
+    reach < 0
+      ? [0]
+      : reach > 0
+        ? [Math.max(0, metrics.rowCount - format.rows)]
+        : null;
+  const slot = getMasonrySlot(
+    occupiedCells,
+    format,
+    metrics.rowCount,
+    itemIndex,
+    preferredRows,
+  );
+  placeMasonryItem(occupiedCells, slot.column, slot.row, format);
+
+  const width =
+    metrics.cellSize * format.columns + masonryGap * (format.columns - 1);
+  const height =
+    metrics.cellSize * format.rows + masonryGap * (format.rows - 1);
+  const scaledWidth = Math.round(width * format.widthScale);
+  const scaledHeight = Math.round(height * format.heightScale);
+  const insetX = (width - scaledWidth) * ((itemIndex % 3) / 2);
+  const insetY = (height - scaledHeight) * (((itemIndex + 1) % 3) / 2);
+  const left =
+    metrics.batchBaseX +
+    slot.column * (metrics.cellSize + masonryGap) +
+    insetX +
+    getRandomBetween(-6, 6);
+  const top =
+    metrics.topPadding +
+    slot.row * (metrics.cellSize + masonryGap) +
+    insetY +
+    reach +
+    getRandomBetween(-7, 7);
+  const resolvedRect = resolveVisualRect(
+    {
+      left,
+      top,
+      width: scaledWidth,
+      height: scaledHeight,
+    },
+    occupiedRects,
+    {
+      maxBottom: metrics.galleryBottom + Math.max(reach, 0) + 4,
+      minTop: metrics.topPadding + Math.min(reach, 0) - 4,
+    },
+  );
+
+  const shouldRelationshipMove = false;
+
+  return {
+    width: `${scaledWidth}px`,
+    height: `${scaledHeight}px`,
+    left: `${Math.round(resolvedRect.left)}px`,
+    top: `${Math.round(resolvedRect.top)}px`,
     relationshipMotion: shouldRelationshipMove
       ? {
           targetX: getRandomBetween(8, 18) * (Math.random() < 0.5 ? -1 : 1),
@@ -121,35 +367,79 @@ function getRandomLayout(laneIndex) {
 }
 
 function getRandomOpacity() {
-  const opacities = [0.5, 0.6, 0.65, 0.7, 0.75, 0.8, 0.85, 0.9, 0.95, 1];
-  return opacities[Math.floor(Math.random() * opacities.length)];
+  return 1;
 }
 
 function getRandomImageMotion() {
   return {
-    depth: Number(getRandomBetween(0.2, 1).toFixed(2)),
     duration: Number(getRandomBetween(0.72, 1.08).toFixed(2)),
     delay: Number(getRandomBetween(0, 0.08).toFixed(2)),
   };
 }
 
-function createGalleryBatch(batchIndex) {
-  return shuffleArray(allImages).map((src, itemIndex) => ({
-    id: `${batchIndex}-${itemIndex}`,
-    batchIndex,
-    src,
-    alt: `Gallery image ${itemIndex + 1}`,
-    layout: getRandomLayout(itemIndex),
-    opacity: getRandomOpacity(),
-    tag: imageTags[src] || null,
-    motion: getRandomImageMotion(),
-  }));
+function createGalleryBatch(batchIndex, occupiedRects = []) {
+  const batchImages = shuffleArray(
+    Array.from({ length: galleryCopiesPerBatch }, () => allImages).flat(),
+  );
+  const occupiedCells = {};
+
+  return batchImages.map((src, itemIndex) => {
+    const layout = getMasonryLayout(
+      itemIndex,
+      batchIndex,
+      occupiedCells,
+      occupiedRects,
+    );
+
+    occupiedRects.push({
+      left: Number.parseFloat(layout.left),
+      top: Number.parseFloat(layout.top),
+      width: Number.parseFloat(layout.width),
+      height: Number.parseFloat(layout.height),
+    });
+
+    return {
+      id: `${batchIndex}-${itemIndex}`,
+      batchIndex,
+      src,
+      alt: `Gallery image ${itemIndex + 1}`,
+      layout,
+      opacity: getRandomOpacity(),
+      tag: imageTags[src] || null,
+      motion: getRandomImageMotion(),
+    };
+  });
 }
 
 function buildGalleryItems(batchCount = initialGalleryBatches) {
+  const occupiedRects = [];
+
   return Array.from({ length: batchCount }, (_, batchIndex) =>
-    createGalleryBatch(batchIndex),
+    createGalleryBatch(batchIndex, occupiedRects),
   ).flat();
+}
+
+function getOccupiedRects(items) {
+  return items.map((item) => ({
+    left: Number.parseFloat(item.layout.left),
+    top: Number.parseFloat(item.layout.top),
+    width: Number.parseFloat(item.layout.width),
+    height: Number.parseFloat(item.layout.height),
+  }));
+}
+
+function getGalleryTrackWidth(items) {
+  const contentWidth = items.reduce((maxRight, item) => {
+    const left = Number.parseFloat(item.layout.left);
+    const width = Number.parseFloat(item.layout.width);
+
+    return Math.max(maxRight, left + width);
+  }, 0);
+
+  const viewportWidth =
+    typeof window === "undefined" ? 1200 : window.innerWidth;
+
+  return Math.ceil(contentWidth + viewportWidth);
 }
 
 function getNextGalleryBatchIndex(items) {
@@ -649,6 +939,7 @@ function App() {
         scale: 0.96,
         filter: "blur(8px) saturate(0.72) brightness(0.94)",
       });
+      wrapper.dataset.initialReveal = wrapper.dataset.initialReveal || "true";
       wrapper.dataset.smoothX = "0";
       wrapper.dataset.smoothY = "12";
       wrapper.dataset.smoothScale = "0.96";
@@ -659,26 +950,22 @@ function App() {
         const wrapper = track.querySelector(`[data-image-id="${item.id}"]`);
         if (!wrapper) return;
 
-        const rect = wrapper.getBoundingClientRect();
-        const isVisible = rect.right > 0 && rect.left < window.innerWidth;
+        const layoutLeft = Number.parseFloat(item.layout.left);
+        const layoutWidth = Number.parseFloat(item.layout.width);
+        const screenLeft = layoutLeft - movement.distance;
+        const screenRight = screenLeft + layoutWidth;
+        const isVisible = screenRight > 0 && screenLeft < window.innerWidth;
         const isNearViewport =
-          rect.right > -preEntryDistance &&
-          rect.left < window.innerWidth + preEntryDistance;
+          screenRight > -preEntryDistance &&
+          screenLeft < window.innerWidth + preEntryDistance;
         const isAwayFromViewport =
-          rect.right < -preEntryDistance ||
-          rect.left > window.innerWidth + preEntryDistance;
-        const wrapperCenter = rect.left + rect.width / 2;
+          screenRight < -preEntryDistance ||
+          screenLeft > window.innerWidth + preEntryDistance;
+        const wrapperCenter = screenLeft + layoutWidth / 2;
         const viewportCenter = window.innerWidth / 2;
-        const viewportProgress = clamp(
-          wrapperCenter / window.innerWidth,
-          0,
-          1,
-        );
         const centerAmount =
           1 -
           clamp(Math.abs(wrapperCenter - viewportCenter) / viewportCenter, 0, 1);
-        const depthShift = (item.motion.depth - 0.5) * 44;
-        const parallaxX = (viewportProgress - 0.5) * depthShift;
         const centerScale = 1 - centerAmount * 0.05;
         const relationshipProgress = item.layout.relationshipMotion
           ? Number(wrapper.dataset.relationshipProgress || 0)
@@ -704,6 +991,11 @@ function App() {
         if (isNearViewport && !animatedImages.has(item.id)) {
           animatedImages.add(item.id);
 
+          const initialStagger =
+            wrapper.dataset.initialReveal === "true" && isVisible
+              ? clamp(screenLeft / window.innerWidth, 0, 1) * 0.42
+              : 0;
+
           gsap.fromTo(
             wrapper,
             {
@@ -718,9 +1010,10 @@ function App() {
               scale: 1,
               filter: "blur(0px) saturate(1) brightness(1)",
               duration: item.motion.duration,
-              delay: item.motion.delay,
+              delay: initialStagger + item.motion.delay,
               ease: "power3.out",
               onComplete: () => {
+                wrapper.dataset.initialReveal = "false";
                 wrapper.dataset.hasEntered = "true";
                 wrapper.dataset.smoothX = "0";
                 wrapper.dataset.smoothY = "0";
@@ -736,41 +1029,7 @@ function App() {
           animatedImages.has(item.id) &&
           wrapper.dataset.hasEntered === "true"
         ) {
-          const activeZIndex =
-            nextRelationshipProgress > 0.02
-              ? item.layout.relationshipMotion?.zIndex || item.layout.zIndex
-              : item.layout.zIndex;
-          const isBehindOverlappingImage = galleryItems.some((otherItem) => {
-            if (otherItem.id === item.id) return false;
-
-            const otherWrapper = track.querySelector(
-              `[data-image-id="${otherItem.id}"]`,
-            );
-            if (!otherWrapper || !animatedImages.has(otherItem.id)) {
-              return false;
-            }
-
-            const otherRect = otherWrapper.getBoundingClientRect();
-            const overlaps =
-              rect.left < otherRect.right &&
-              rect.right > otherRect.left &&
-              rect.top < otherRect.bottom &&
-              rect.bottom > otherRect.top;
-
-            if (!overlaps) return false;
-
-            const otherRelationshipProgress = Number(
-              otherWrapper.dataset.relationshipProgress || 0,
-            );
-            const otherZIndex =
-              otherRelationshipProgress > 0.02
-                ? otherItem.layout.relationshipMotion?.zIndex ||
-                  otherItem.layout.zIndex
-                : otherItem.layout.zIndex;
-
-            return otherZIndex > activeZIndex;
-          });
-          const targetX = parallaxX + relationshipX;
+          const targetX = relationshipX;
           const targetY = relationshipY;
           const targetScale = centerScale;
           const smoothX = Number(wrapper.dataset.smoothX || 0);
@@ -786,13 +1045,14 @@ function App() {
           wrapper.dataset.smoothScale = String(nextScale);
 
           gsap.set(wrapper, {
-            opacity: isBehindOverlappingImage
-              ? item.opacity * 0.8
-              : item.opacity,
+            opacity: item.opacity,
             x: nextX,
             y: nextY,
             scale: nextScale,
-            zIndex: activeZIndex,
+            zIndex:
+              nextRelationshipProgress > 0.02
+                ? item.layout.relationshipMotion?.zIndex || item.layout.zIndex
+                : item.layout.zIndex,
           });
         }
 
@@ -830,8 +1090,12 @@ function App() {
 
       setGalleryItems((currentItems) => {
         const nextBatchIndex = getNextGalleryBatchIndex(currentItems);
+        const occupiedRects = getOccupiedRects(currentItems);
 
-        return [...currentItems, ...createGalleryBatch(nextBatchIndex)];
+        return [
+          ...currentItems,
+          ...createGalleryBatch(nextBatchIndex, occupiedRects),
+        ];
       });
 
       requestAnimationFrame(() => {
@@ -920,17 +1184,29 @@ function App() {
   return (
     <div className="app-shell">
       <header className="site-header">
-        <div className="brand">[ urbānum ]</div>
-        <button className="menu-toggle" aria-label="Menu">
-          <span />
-          <span />
-          <span />
-        </button>
+        <img className="brand" src="/urbanum-logo.jpg" alt="urbānum" />
+        <nav className="top-menu" aria-label="Gallery navigation">
+          <div className="top-menu__group" aria-label="Browse tools">
+            <button type="button" className="text-control text-control--active">
+              Filter
+            </button>
+            <button type="button" className="text-control text-control--muted">
+              Search
+            </button>
+          </div>
+          <button type="button" className="text-control text-control--active">
+            Menu
+          </button>
+        </nav>
       </header>
 
       <div className="scroll-container" ref={scrollContainerRef}>
         <div className="sticky-wrapper">
-          <div className="gallery-track" ref={trackRef}>
+          <div
+            className="gallery-track"
+            ref={trackRef}
+            style={{ width: `${getGalleryTrackWidth(galleryItems)}px` }}
+          >
             {galleryItems.map((item) => (
               <button
                 key={item.id}
@@ -951,8 +1227,8 @@ function App() {
                 style={{
                   width: item.layout.width,
                   height: item.layout.height,
+                  left: item.layout.left,
                   top: item.layout.top,
-                  marginRight: item.layout.gap,
                   opacity: item.opacity,
                   zIndex: item.layout.zIndex,
                 }}
@@ -967,6 +1243,15 @@ function App() {
             ))}
           </div>
         </div>
+      </div>
+
+      <div className="zoom-controls" aria-label="Zoom controls">
+        <button type="button" className="zoom-control" aria-label="Zoom out">
+          -
+        </button>
+        <button type="button" className="zoom-control" aria-label="Zoom in">
+          +
+        </button>
       </div>
 
       <button
