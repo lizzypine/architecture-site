@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import gsap from "gsap";
+import imageMetadata from "./image-metadata.json";
 
 const allImages = [
   "/img/pexels-adrien-olichon-1257089-3137038.jpg",
@@ -52,6 +53,7 @@ const imageTags = {
 const imageFocusEnabled = false;
 const galleryBatchWidth = 1760;
 const galleryEdgeBleed = 190;
+const galleryBatchOverlapRatio = 0.5;
 const galleryCopiesPerBatch = 2;
 const masonryGap = 4;
 
@@ -74,7 +76,62 @@ const connectorTimings = [
 ];
 
 const viewportMargin = 28;
-const initialGalleryBatches = 4;
+const initialGalleryBatches = 3;
+const optimizedImageWidths = [400, 800, 1200];
+const minRenderOverscan = 1200;
+const maxRenderOverscan = 3600;
+
+function getImageName(src) {
+  return src.split("/").pop()?.replace(/\.[^.]+$/, "") || "";
+}
+
+function getOptimizedImageSrc(src, width = 800, extension = "jpg") {
+  return `/img/optimized/${width}/${getImageName(src)}.${extension}`;
+}
+
+function getOptimizedImageSrcSet(src, extension) {
+  return optimizedImageWidths
+    .map((width) => `${getOptimizedImageSrc(src, width, extension)} ${width}w`)
+    .join(", ");
+}
+
+function getGalleryImageSizes(layout) {
+  const width = Math.ceil(Number.parseFloat(layout.width));
+
+  return `${width}px`;
+}
+
+function getImageDimensions(src) {
+  return imageMetadata[src] || { width: 1200, height: 800 };
+}
+
+function shouldEagerLoadImage(item) {
+  const itemIndex = Number(item.id.split("-")[1] || 0);
+
+  return item.batchIndex === 0 && itemIndex < 12;
+}
+
+function getGalleryRenderWindow(distance = 0) {
+  const viewportWidth =
+    typeof window === "undefined" ? 1200 : window.innerWidth;
+  const overscan = clamp(
+    viewportWidth * 2.4,
+    minRenderOverscan,
+    maxRenderOverscan,
+  );
+
+  return {
+    left: Math.max(0, distance - overscan),
+    right: distance + viewportWidth + overscan,
+  };
+}
+
+function isItemInRenderWindow(item, renderWindow) {
+  const left = Number.parseFloat(item.layout.left);
+  const right = left + Number.parseFloat(item.layout.width);
+
+  return right >= renderWindow.left && left <= renderWindow.right;
+}
 
 function shuffleArray(array) {
   const shuffled = [...array];
@@ -104,7 +161,42 @@ function rectCollides(rect, occupiedRects, padding = 0) {
   );
 }
 
-function getMasonryMetrics(batchIndex) {
+function getDefaultBatchBaseX(batchIndex) {
+  const viewportWidth =
+    typeof window === "undefined" ? 1200 : window.innerWidth;
+
+  return (
+    batchIndex *
+      Math.round(clamp(viewportWidth * 1.08, 1260, galleryBatchWidth)) -
+    galleryEdgeBleed
+  );
+}
+
+function getBatchOverlapDistance() {
+  const viewportWidth =
+    typeof window === "undefined" ? 1200 : window.innerWidth;
+
+  return Math.round(
+    clamp(viewportWidth * galleryBatchOverlapRatio, 420, 760),
+  );
+}
+
+function getRectMaxRight(rects) {
+  return rects.reduce(
+    (maxRight, rect) => Math.max(maxRight, rect.left + rect.width),
+    0,
+  );
+}
+
+function getContinuousBatchBaseX(batchIndex, occupiedRects) {
+  if (batchIndex === 0 || occupiedRects.length === 0) {
+    return getDefaultBatchBaseX(batchIndex);
+  }
+
+  return getRectMaxRight(occupiedRects) - getBatchOverlapDistance();
+}
+
+function getMasonryMetrics(batchIndex, batchBaseX = null) {
   const viewportHeight =
     typeof window === "undefined" ? 800 : window.innerHeight;
   const viewportWidth =
@@ -133,10 +225,7 @@ function getMasonryMetrics(batchIndex) {
   );
 
   return {
-    batchBaseX:
-      batchIndex *
-        Math.round(clamp(viewportWidth * 1.08, 1260, galleryBatchWidth)) -
-      galleryEdgeBleed,
+    batchBaseX: batchBaseX ?? getDefaultBatchBaseX(batchIndex),
     cellSize: clamp(cellSize, 54, 104),
     galleryBottom: viewportHeight - bottomPadding,
     isCompactViewport,
@@ -292,8 +381,14 @@ function resolveVisualRect(initialRect, occupiedRects, bounds = {}) {
   return initialRect;
 }
 
-function getMasonryLayout(itemIndex, batchIndex, occupiedCells, occupiedRects) {
-  const metrics = getMasonryMetrics(batchIndex);
+function getMasonryLayout(
+  itemIndex,
+  batchIndex,
+  occupiedCells,
+  occupiedRects,
+  batchBaseX = null,
+) {
+  const metrics = getMasonryMetrics(batchIndex, batchBaseX);
   const originalFormat = getMasonryFormat(itemIndex);
   const format =
     originalFormat.rows > metrics.rowCount
@@ -382,6 +477,7 @@ function createGalleryBatch(batchIndex, occupiedRects = []) {
     Array.from({ length: galleryCopiesPerBatch }, () => allImages).flat(),
   );
   const occupiedCells = {};
+  const batchBaseX = getContinuousBatchBaseX(batchIndex, occupiedRects);
 
   return batchImages.map((src, itemIndex) => {
     const layout = getMasonryLayout(
@@ -389,6 +485,7 @@ function createGalleryBatch(batchIndex, occupiedRects = []) {
       batchIndex,
       occupiedCells,
       occupiedRects,
+      batchBaseX,
     );
 
     occupiedRects.push({
@@ -533,17 +630,25 @@ function App() {
   const animatedImagesRef = useRef(new Set());
   const focusTimelineRef = useRef(null);
   const focusedIdRef = useRef(null);
+  const renderWindowRef = useRef(getGalleryRenderWindow());
   const [galleryItems, setGalleryItems] = useState([]);
+  const [renderWindow, setRenderWindow] = useState(() =>
+    getGalleryRenderWindow(),
+  );
   const [focusedId, setFocusedId] = useState(null);
   const [focusedImage, setFocusedImage] = useState(null);
 
   useEffect(() => {
     galleryMovementRef.current.distance = 0;
+    renderWindowRef.current = getGalleryRenderWindow(0);
+    setRenderWindow(renderWindowRef.current);
     animatedImagesRef.current.clear();
     setGalleryItems(buildGalleryItems());
 
     const handleResize = () => {
       galleryMovementRef.current.distance = 0;
+      renderWindowRef.current = getGalleryRenderWindow(0);
+      setRenderWindow(renderWindowRef.current);
       animatedImagesRef.current.clear();
       setGalleryItems(buildGalleryItems());
     };
@@ -923,6 +1028,7 @@ function App() {
     const animatedImages = animatedImagesRef.current;
     const preEntryDistance = 360;
     const friction = 0.92;
+    const renderWindowUpdateThreshold = Math.max(window.innerWidth * 0.35, 240);
     let animationFrame = null;
     let touchPoint = null;
 
@@ -1075,6 +1181,25 @@ function App() {
       });
     };
 
+    const updateRenderWindow = () => {
+      if (focusedIdRef.current !== null) return;
+
+      const nextRenderWindow = getGalleryRenderWindow(movement.distance);
+      const currentRenderWindow = renderWindowRef.current;
+
+      if (
+        Math.abs(nextRenderWindow.left - currentRenderWindow.left) <
+          renderWindowUpdateThreshold &&
+        Math.abs(nextRenderWindow.right - currentRenderWindow.right) <
+          renderWindowUpdateThreshold
+      ) {
+        return;
+      }
+
+      renderWindowRef.current = nextRenderWindow;
+      setRenderWindow(nextRenderWindow);
+    };
+
     const extendGalleryIfNeeded = () => {
       const remainingTrack = track.scrollWidth - movement.distance;
       const extensionThreshold = window.innerWidth * 3;
@@ -1106,6 +1231,7 @@ function App() {
     const updateGalleryMotion = () => {
       setTrackX(-movement.distance);
       extendGalleryIfNeeded();
+      updateRenderWindow();
       updateEntranceAnimations();
     };
 
@@ -1181,6 +1307,11 @@ function App() {
     return <div className="app-shell" />;
   }
 
+  const renderedGalleryItems =
+    focusedId === null
+      ? galleryItems.filter((item) => isItemInRenderWindow(item, renderWindow))
+      : galleryItems;
+
   return (
     <div className="app-shell">
       <header className="site-header">
@@ -1207,40 +1338,65 @@ function App() {
             ref={trackRef}
             style={{ width: `${getGalleryTrackWidth(galleryItems)}px` }}
           >
-            {galleryItems.map((item) => (
-              <button
-                key={item.id}
-                type="button"
-                data-image-id={item.id}
-                data-batch-index={item.batchIndex}
-                className={`gallery-image-wrapper${
-                  imageFocusEnabled ? "" : " gallery-image-wrapper--disabled"
-                }`}
-                onClick={
-                  imageFocusEnabled ? () => handleImageClick(item.id) : undefined
-                }
-                aria-label={imageFocusEnabled ? `Focus ${item.alt}` : item.alt}
-                aria-pressed={
-                  imageFocusEnabled ? focusedId === item.id : undefined
-                }
-                tabIndex={imageFocusEnabled ? 0 : -1}
-                style={{
-                  width: item.layout.width,
-                  height: item.layout.height,
-                  left: item.layout.left,
-                  top: item.layout.top,
-                  opacity: item.opacity,
-                  zIndex: item.layout.zIndex,
-                }}
-              >
-                <img
-                  src={item.src}
-                  alt={item.alt}
-                  className="gallery-image"
-                  loading="lazy"
-                />
-              </button>
-            ))}
+            {renderedGalleryItems.map((item) => {
+              const dimensions = getImageDimensions(item.src);
+
+              return (
+                <button
+                  key={item.id}
+                  type="button"
+                  data-image-id={item.id}
+                  data-batch-index={item.batchIndex}
+                  className={`gallery-image-wrapper${
+                    imageFocusEnabled ? "" : " gallery-image-wrapper--disabled"
+                  }`}
+                  onClick={
+                    imageFocusEnabled
+                      ? () => handleImageClick(item.id)
+                      : undefined
+                  }
+                  aria-label={
+                    imageFocusEnabled ? `Focus ${item.alt}` : item.alt
+                  }
+                  aria-pressed={
+                    imageFocusEnabled ? focusedId === item.id : undefined
+                  }
+                  tabIndex={imageFocusEnabled ? 0 : -1}
+                  style={{
+                    width: item.layout.width,
+                    height: item.layout.height,
+                    left: item.layout.left,
+                    top: item.layout.top,
+                    zIndex: item.layout.zIndex,
+                  }}
+                >
+                  <picture>
+                    <source
+                      type="image/webp"
+                      srcSet={getOptimizedImageSrcSet(item.src, "webp")}
+                      sizes={getGalleryImageSizes(item.layout)}
+                    />
+                    <source
+                      type="image/jpeg"
+                      srcSet={getOptimizedImageSrcSet(item.src, "jpg")}
+                      sizes={getGalleryImageSizes(item.layout)}
+                    />
+                    <img
+                      src={getOptimizedImageSrc(item.src)}
+                      alt={item.alt}
+                      className="gallery-image"
+                      width={dimensions.width}
+                      height={dimensions.height}
+                      loading={shouldEagerLoadImage(item) ? "eager" : "lazy"}
+                      fetchPriority={
+                        shouldEagerLoadImage(item) ? "high" : "auto"
+                      }
+                      decoding="async"
+                    />
+                  </picture>
+                </button>
+              );
+            })}
           </div>
         </div>
       </div>
@@ -1288,27 +1444,76 @@ function App() {
 
       {focusedImage && (
         <div ref={focusedCloneRef} className="focused-image-frame">
-          <img src={focusedImage.src} alt={focusedImage.alt} loading="lazy" />
+          {(() => {
+            const dimensions = getImageDimensions(focusedImage.src);
+
+            return (
+          <picture>
+            <source
+              type="image/webp"
+              srcSet={getOptimizedImageSrcSet(focusedImage.src, "webp")}
+              sizes="90vw"
+            />
+            <source
+              type="image/jpeg"
+              srcSet={getOptimizedImageSrcSet(focusedImage.src, "jpg")}
+              sizes="90vw"
+            />
+            <img
+              src={getOptimizedImageSrc(focusedImage.src, 1200)}
+              alt={focusedImage.alt}
+              width={dimensions.width}
+              height={dimensions.height}
+              loading="eager"
+              fetchPriority="high"
+              decoding="async"
+            />
+          </picture>
+            );
+          })()}
         </div>
       )}
 
-      {focusedImage?.relatedImages.map((item, index) => (
-        <div
-          key={item.id}
-          className="focused-image-frame related-image-frame"
-          data-left={item.rect.left}
-          data-top={item.rect.top}
-          data-width={item.rect.width}
-          data-height={item.rect.height}
-          data-cluster-scale={
-            clusterPlacements[index % clusterPlacements.length].scale
-          }
-          onMouseEnter={handleRelatedImageEnter}
-          onMouseLeave={handleRelatedImageLeave}
-        >
-          <img src={item.src} alt={item.alt} loading="lazy" />
-        </div>
-      ))}
+      {focusedImage?.relatedImages.map((item, index) => {
+        const dimensions = getImageDimensions(item.src);
+
+        return (
+          <div
+            key={item.id}
+            className="focused-image-frame related-image-frame"
+            data-left={item.rect.left}
+            data-top={item.rect.top}
+            data-width={item.rect.width}
+            data-height={item.rect.height}
+            data-cluster-scale={
+              clusterPlacements[index % clusterPlacements.length].scale
+            }
+            onMouseEnter={handleRelatedImageEnter}
+            onMouseLeave={handleRelatedImageLeave}
+          >
+            <picture>
+              <source
+                type="image/webp"
+                srcSet={getOptimizedImageSrcSet(item.src, "webp")}
+                sizes="30vw"
+              />
+              <source
+                type="image/jpeg"
+                srcSet={getOptimizedImageSrcSet(item.src, "jpg")}
+                sizes="30vw"
+              />
+              <img
+                src={getOptimizedImageSrc(item.src)}
+                alt={item.alt}
+                width={dimensions.width}
+                height={dimensions.height}
+                loading="lazy"
+                decoding="async"
+              />
+            </picture>
+          </div>
+        );
+      })}
     </div>
   );
 }

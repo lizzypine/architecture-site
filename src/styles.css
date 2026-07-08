@@ -131,6 +131,9 @@ body {
   cursor: pointer;
   background: transparent;
   box-shadow: none;
+  opacity: 0.18;
+  filter: blur(8px) saturate(0.72) brightness(0.94);
+  transform: translateY(12px) scale(0.96);
   will-change: transform;
   transform-origin: center center;
   pointer-events: auto;
@@ -143,6 +146,14 @@ body {
 
 .gallery-image-wrapper--disabled {
   cursor: default;
+}
+
+.gallery-image-wrapper picture,
+.focused-image-frame picture,
+.related-image-frame picture {
+  display: block;
+  width: 100%;
+  height: 100%;
 }
 
 .gallery-image {
