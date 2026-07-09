@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import gsap from "gsap";
 import imageMetadata from "./image-metadata.json";
+import { fetchArchiveImages, getSanityImageUrl } from "./sanity/client";
 
 const allImages = [
   "/img/pexels-adrien-olichon-1257089-3137038.jpg",
@@ -50,6 +51,14 @@ const imageTags = {
   "/img/pexels-artbovich-8089093.jpg": "structure",
 };
 
+const localGalleryImages = allImages.map((src, index) => ({
+  id: `local-${index}`,
+  src,
+  alt: `Gallery image ${index + 1}`,
+  tag: imageTags[src] || null,
+  sourceType: "local",
+}));
+
 const imageFocusEnabled = false;
 const galleryBatchWidth = 1760;
 const galleryEdgeBleed = 190;
@@ -95,14 +104,64 @@ function getOptimizedImageSrcSet(src, extension) {
     .join(", ");
 }
 
+function getImageKey(image) {
+  return image.id || image.src;
+}
+
+function getImageAlt(image, fallback = "Gallery image") {
+  return image.alt || image.title || image.archiveNumber || fallback;
+}
+
+function getImageTag(image) {
+  return image.tag || image.tags?.[0] || image.category || null;
+}
+
+function getSanityDimensions(image) {
+  return image?.image?.asset?.metadata?.dimensions;
+}
+
+function getSanityImageSource(image) {
+  return image?.image || null;
+}
+
+function getImageSourceSet(image, extension) {
+  if (image.sourceType === "sanity") {
+    return optimizedImageWidths
+      .map(
+        (width) =>
+          `${getSanityImageUrl(getSanityImageSource(image), width, extension)} ${width}w`,
+      )
+      .join(", ");
+  }
+
+  return getOptimizedImageSrcSet(image.src, extension);
+}
+
+function getImageFallbackSrc(image, width = 800) {
+  if (image.sourceType === "sanity") {
+    return getSanityImageUrl(getSanityImageSource(image), width);
+  }
+
+  return getOptimizedImageSrc(image.src, width);
+}
+
 function getGalleryImageSizes(layout) {
   const width = Math.ceil(Number.parseFloat(layout.width));
 
   return `${width}px`;
 }
 
-function getImageDimensions(src) {
-  return imageMetadata[src] || { width: 1200, height: 800 };
+function getImageDimensions(image) {
+  if (image.sourceType === "sanity") {
+    const dimensions = getSanityDimensions(image);
+
+    return {
+      width: dimensions?.width || 1200,
+      height: dimensions?.height || 800,
+    };
+  }
+
+  return imageMetadata[image.src] || { width: 1200, height: 800 };
 }
 
 function shouldEagerLoadImage(item) {
@@ -472,14 +531,18 @@ function getRandomImageMotion() {
   };
 }
 
-function createGalleryBatch(batchIndex, occupiedRects = []) {
+function createGalleryBatch(
+  batchIndex,
+  occupiedRects = [],
+  sourceImages = localGalleryImages,
+) {
   const batchImages = shuffleArray(
-    Array.from({ length: galleryCopiesPerBatch }, () => allImages).flat(),
+    Array.from({ length: galleryCopiesPerBatch }, () => sourceImages).flat(),
   );
   const occupiedCells = {};
   const batchBaseX = getContinuousBatchBaseX(batchIndex, occupiedRects);
 
-  return batchImages.map((src, itemIndex) => {
+  return batchImages.map((image, itemIndex) => {
     const layout = getMasonryLayout(
       itemIndex,
       batchIndex,
@@ -498,21 +561,25 @@ function createGalleryBatch(batchIndex, occupiedRects = []) {
     return {
       id: `${batchIndex}-${itemIndex}`,
       batchIndex,
-      src,
-      alt: `Gallery image ${itemIndex + 1}`,
+      image,
+      src: image.src,
+      alt: getImageAlt(image, `Gallery image ${itemIndex + 1}`),
       layout,
       opacity: getRandomOpacity(),
-      tag: imageTags[src] || null,
+      tag: getImageTag(image),
       motion: getRandomImageMotion(),
     };
   });
 }
 
-function buildGalleryItems(batchCount = initialGalleryBatches) {
+function buildGalleryItems(
+  batchCount = initialGalleryBatches,
+  sourceImages = localGalleryImages,
+) {
   const occupiedRects = [];
 
   return Array.from({ length: batchCount }, (_, batchIndex) =>
-    createGalleryBatch(batchIndex, occupiedRects),
+    createGalleryBatch(batchIndex, occupiedRects, sourceImages),
   ).flat();
 }
 
@@ -632,6 +699,7 @@ function App() {
   const focusedIdRef = useRef(null);
   const renderWindowRef = useRef(getGalleryRenderWindow());
   const [galleryItems, setGalleryItems] = useState([]);
+  const [sourceImages, setSourceImages] = useState(localGalleryImages);
   const [renderWindow, setRenderWindow] = useState(() =>
     getGalleryRenderWindow(),
   );
@@ -639,18 +707,50 @@ function App() {
   const [focusedImage, setFocusedImage] = useState(null);
 
   useEffect(() => {
+    let isCancelled = false;
+
+    async function loadSanityImages() {
+      try {
+        const archiveImages = await fetchArchiveImages();
+        if (isCancelled || archiveImages.length === 0) return;
+
+        setSourceImages(
+          archiveImages.map((image) => ({
+            ...image,
+            id: image._id,
+            alt:
+              image.title ||
+              image.archiveNumber ||
+              image.description ||
+              "Archive image",
+            sourceType: "sanity",
+          })),
+        );
+      } catch (error) {
+        console.warn("Unable to load Sanity images. Using local fallback.", error);
+      }
+    }
+
+    loadSanityImages();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
     galleryMovementRef.current.distance = 0;
     renderWindowRef.current = getGalleryRenderWindow(0);
     setRenderWindow(renderWindowRef.current);
     animatedImagesRef.current.clear();
-    setGalleryItems(buildGalleryItems());
+    setGalleryItems(buildGalleryItems(initialGalleryBatches, sourceImages));
 
     const handleResize = () => {
       galleryMovementRef.current.distance = 0;
       renderWindowRef.current = getGalleryRenderWindow(0);
       setRenderWindow(renderWindowRef.current);
       animatedImagesRef.current.clear();
-      setGalleryItems(buildGalleryItems());
+      setGalleryItems(buildGalleryItems(initialGalleryBatches, sourceImages));
     };
 
     window.addEventListener("resize", handleResize);
@@ -658,7 +758,7 @@ function App() {
     return () => {
       window.removeEventListener("resize", handleResize);
     };
-  }, []);
+  }, [sourceImages]);
 
   const getImageWrapper = useCallback((imageId) => {
     return trackRef.current?.querySelector(`[data-image-id="${imageId}"]`);
@@ -789,6 +889,7 @@ function App() {
 
               return {
                 id: item.id,
+                image: item.image,
                 src: item.src,
                 alt: item.alt,
                 tag: item.tag,
@@ -808,6 +909,7 @@ function App() {
 
       setFocusedImage({
         id: imageId,
+        image: focusedItem.image,
         src: focusedItem.src,
         alt: focusedItem.alt,
         tag: focusedItem.tag,
@@ -1219,7 +1321,7 @@ function App() {
 
         return [
           ...currentItems,
-          ...createGalleryBatch(nextBatchIndex, occupiedRects),
+          ...createGalleryBatch(nextBatchIndex, occupiedRects, sourceImages),
         ];
       });
 
@@ -1301,7 +1403,7 @@ function App() {
       window.removeEventListener("touchstart", handleTouchStart);
       window.removeEventListener("touchmove", handleTouchMove);
     };
-  }, [galleryItems]);
+  }, [galleryItems, sourceImages]);
 
   if (galleryItems.length === 0) {
     return <div className="app-shell" />;
@@ -1339,7 +1441,7 @@ function App() {
             style={{ width: `${getGalleryTrackWidth(galleryItems)}px` }}
           >
             {renderedGalleryItems.map((item) => {
-              const dimensions = getImageDimensions(item.src);
+              const dimensions = getImageDimensions(item.image);
 
               return (
                 <button
@@ -1373,16 +1475,16 @@ function App() {
                   <picture>
                     <source
                       type="image/webp"
-                      srcSet={getOptimizedImageSrcSet(item.src, "webp")}
+                      srcSet={getImageSourceSet(item.image, "webp")}
                       sizes={getGalleryImageSizes(item.layout)}
                     />
                     <source
                       type="image/jpeg"
-                      srcSet={getOptimizedImageSrcSet(item.src, "jpg")}
+                      srcSet={getImageSourceSet(item.image, "jpg")}
                       sizes={getGalleryImageSizes(item.layout)}
                     />
                     <img
-                      src={getOptimizedImageSrc(item.src)}
+                      src={getImageFallbackSrc(item.image)}
                       alt={item.alt}
                       className="gallery-image"
                       width={dimensions.width}
@@ -1445,22 +1547,22 @@ function App() {
       {focusedImage && (
         <div ref={focusedCloneRef} className="focused-image-frame">
           {(() => {
-            const dimensions = getImageDimensions(focusedImage.src);
+            const dimensions = getImageDimensions(focusedImage.image);
 
             return (
           <picture>
             <source
               type="image/webp"
-              srcSet={getOptimizedImageSrcSet(focusedImage.src, "webp")}
+              srcSet={getImageSourceSet(focusedImage.image, "webp")}
               sizes="90vw"
             />
             <source
               type="image/jpeg"
-              srcSet={getOptimizedImageSrcSet(focusedImage.src, "jpg")}
+              srcSet={getImageSourceSet(focusedImage.image, "jpg")}
               sizes="90vw"
             />
             <img
-              src={getOptimizedImageSrc(focusedImage.src, 1200)}
+              src={getImageFallbackSrc(focusedImage.image, 1200)}
               alt={focusedImage.alt}
               width={dimensions.width}
               height={dimensions.height}
@@ -1475,7 +1577,7 @@ function App() {
       )}
 
       {focusedImage?.relatedImages.map((item, index) => {
-        const dimensions = getImageDimensions(item.src);
+        const dimensions = getImageDimensions(item.image);
 
         return (
           <div
@@ -1494,16 +1596,16 @@ function App() {
             <picture>
               <source
                 type="image/webp"
-                srcSet={getOptimizedImageSrcSet(item.src, "webp")}
+                srcSet={getImageSourceSet(item.image, "webp")}
                 sizes="30vw"
               />
               <source
                 type="image/jpeg"
-                srcSet={getOptimizedImageSrcSet(item.src, "jpg")}
+                srcSet={getImageSourceSet(item.image, "jpg")}
                 sizes="30vw"
               />
               <img
-                src={getOptimizedImageSrc(item.src)}
+                src={getImageFallbackSrc(item.image)}
                 alt={item.alt}
                 width={dimensions.width}
                 height={dimensions.height}

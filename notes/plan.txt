@@ -1,10 +1,12 @@
 Project Plan: WordPress + React Site Architecture
 
-Goal:
-- Use WordPress as the backend content management system for Josh to add/manage entries.
-- Build the public-facing site as a separate React application that fetches content from WordPress via the REST API.
-- Allow WordPress to manage images, tags, featured toggles, and entry metadata.
-- Create a custom React homepage layout with an organic “field of images” experience rather than a traditional grid.
+You are a software engineer helping me build out the backend of a website.
+- The frontend is already built. It uses React.
+- I want to use a backend content management system for the user to add/manage entries.
+- We need a user-friendly way to upload an image and assign one category and at least one tag to each image. This could be like a form.
+- Each image will have Archive Number (unique identifier), Category (limited predefined list), Tags (unlimited), Additional metadata as needed
+- The images and metadata will need to be fetched to use in the React frontend of the site.
+
 
 Phase 1: Strategy & Architecture
 1. Define content model in WordPress:
@@ -32,27 +34,26 @@ Phase 2: React Prototype
    - Make sure the layout can adapt to new entries and featured flags
    - Test on desktop and mobile breakpoints
 
-Phase 3: WordPress Integration
-1. Configure WordPress content model:
-   - Create the custom post type and fields
-   - Add example entries with images, tags, and featured flags
-2. Connect React app to WordPress API:
-   - Use `fetch` or a client library to retrieve posts and media
-   - Map WordPress response fields to frontend components
-   - Implement featured filtering and tag-driven sections
-3. Make content dynamic:
-   - Ensure new WordPress entries appear automatically
-   - Render featured items with priority placement
-   - Use image media URLs directly from WordPress
+Phase 3: CMS
+Decide how to migrate the full archive
+If you have a lot of existing local images, we can write an import script to upload them to Sanity in bulk and create Archive Image documents automatically.
+
+Remove or reduce local-image dependency
+Once Sanity is the source of truth, the local public/img images and image optimizer become fallback/dev tooling rather than the main pipeline. This will simplify Vercel deploys.
+
+Deploy with env vars
+Add these to Vercel:
+VITE_SANITY_PROJECT_ID=
+VITE_SANITY_DATASET=
 
 Phase 4: Deployment & Maintenance
 1. Deployment plan:
    - Deploy React app as a static site (Netlify, Vercel, or Jamstack host)
-   - Host WordPress separately on managed hosting or a small VPS
+   - Host backend separately on managed hosting or a small VPS
    - Configure CORS and API access between frontend and backend
 2. Maintenance expectations:
    - React app: dependency updates a few times a year, build/test check before deploy
-   - WordPress: security updates, plugin/theme updates, content updates by Josh
+   - WordPress or similar: security updates, plugin/theme updates, content updates by Josh
    - Monitor performance, API stability, and content refresh behavior
 
 Immediate next step:

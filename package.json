@@ -3,6 +3,9 @@
   "private": true,
   "version": "0.0.1",
   "type": "module",
+  "engines": {
+    "node": ">=22.12"
+  },
   "scripts": {
     "dev": "vite",
     "optimize:images": "node scripts/optimize-images.mjs",
@@ -10,10 +13,14 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@sanity/client": "^7.23.0",
+    "@sanity/image-url": "^2.1.1",
+    "@sanity/vision": "^6.4.0",
     "framer-motion": "^11.0.0",
     "gsap": "^3.15.0",
-    "react": "^18.3.1",
-    "react-dom": "^18.3.1"
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7",
+    "sanity": "^6.4.0"
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^4.3.1",
