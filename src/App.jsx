@@ -6399,8 +6399,14 @@ function App() {
         deltaX * CAMERA_PAN_TOUCH_IMPULSE_COEFF,
         CAMERA_PAN_TOUCH_VELOCITY_CAP,
       );
+      // Inverted at this single source point only (natural-drag
+      // direction fix): swipe top->bottom should bring the Archive's own
+      // top edge down, i.e. the camera should move opposite to the raw
+      // finger delta on this axis -- so the sign flips here, before
+      // deltaY ever reaches the Y impulse channel, and nothing downstream
+      // (velocity cap, friction, bounds, transform) needs to know about it.
       addTouchPanVelocityY(
-        deltaY * CAMERA_PAN_TOUCH_IMPULSE_COEFF,
+        -deltaY * CAMERA_PAN_TOUCH_IMPULSE_COEFF,
         CAMERA_PAN_TOUCH_VELOCITY_CAP,
       );
     };
