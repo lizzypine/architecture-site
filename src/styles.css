@@ -967,6 +967,16 @@ body {
      A no-op while scale was fixed at 1, which is why this was deferred
      until now. */
   transform-origin: 0 0;
+  /* Archive touch-camera upgrade: this is the ONLY interactive gesture
+     surface for the custom pan/pinch camera (touchstart/touchmove/
+     touchend/touchcancel are all bound at the window level, but this is
+     the element the gesture visually manipulates). Scoped here rather
+     than to .opening-viewport (its parent) because ProjectFilterRow
+     renders as .opening-viewport's OTHER child, a sibling of this track,
+     and needs to keep its own native horizontal scroll/touch behavior --
+     scoping touch-action:none to the parent would have suppressed that
+     too. None of body/html/Header/Search/Project pages are touched. */
+  touch-action: none;
 }
 
 /* Logo-triggered regeneration only (see handleLogoClick in App.jsx) --

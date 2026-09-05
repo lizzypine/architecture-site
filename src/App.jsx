@@ -2668,8 +2668,19 @@ function createGalleryRenderer({
     // relationship viewportPanXRef already has with projectWorldToScreenX.
     // No new wrapper transform, no new element -- same setTrackY call this
     // always was.
+    // Vertical transform stays three distinct additive components:
+    //   1. vertical scale compensation (opening-centered base, above)
+    //   2. zoom-anchor Y correction (viewportPanYRef.current, above)
+    //   3. free touch Y pan (movement.distanceY -- genuine one-finger
+    //      vertical camera travel, converted from world units to screen
+    //      pixels via the current effective scale, mirroring how X's
+    //      world quantities are scaled in projectWorldToScreenX)
+    // Deliberately kept separate, never merged. `movement` is already in
+    // scope here via createGalleryRenderer's own closure.
     const nextTrackY =
-      getVerticalScaleCompensation(scale) + viewportPanYRef.current;
+      getVerticalScaleCompensation(scale) +
+      viewportPanYRef.current +
+      movement.distanceY * scale;
     if (nextTrackY !== lastAppliedTrackY) {
       setTrackY(nextTrackY);
       lastAppliedTrackY = nextTrackY;
@@ -3295,6 +3306,17 @@ function App() {
     // the same friction constant, completely independent of the wheel
     // fields above so finger-drag latency is untouched by this pass.
     touchVelocity: 0,
+    // Archive touch-camera upgrade (vertical pan): the Y counterpart to
+    // distance/touchVelocity immediately above -- same shape, same
+    // scale-invariant treatment, same friction, deliberately with no
+    // wheel/desktop counterpart at all (see addTouchPanVelocityY's own
+    // comment for why wheel must never write here). distanceY is the
+    // world-space vertical free-pan position (bounded every frame in
+    // animateGallery from the real generated-geometry overflow, see that
+    // block's own comment); touchVelocityY is its single-stage
+    // direct-injection accumulator, mirroring touchVelocity exactly.
+    distanceY: 0,
+    touchVelocityY: 0,
     hasBrowsed: false,
   });
   const isExtendingGalleryRef = useRef(false);
@@ -4248,6 +4270,7 @@ function App() {
   // refactored to support.
   const regenerateGallery = useCallback(() => {
     galleryMovementRef.current.distance = 0;
+    galleryMovementRef.current.distanceY = 0;
     resetCameraToNeutral();
     galleryGenerationRef.current += 1;
     const nextOpeningGeometry = getViewportOpeningGeometry({
@@ -5928,6 +5951,78 @@ function App() {
       // frame's math; the two channels above are the actual state.
       movement.velocity = currentVelocity;
 
+      // Archive touch-camera upgrade (vertical pan): the Y counterpart to
+      // the X block above -- same canMove gate, same scale-invariant
+      // division, same friction, deliberately summing NOTHING from wheel
+      // (movement.touchVelocityY has no wheel/desktop writer anywhere in
+      // this file -- see addTouchPanVelocityY's own comment), so desktop
+      // wheel/trackpad input can never move this channel.
+      const currentVelocityY = canMove ? movement.touchVelocityY : 0;
+      const worldDeltaY =
+        effectiveScale > 0
+          ? currentVelocityY / effectiveScale
+          : currentVelocityY;
+
+      // Vertical bounds, derived from real generated geometry rather than
+      // a guessed pixel constant: DAPC's own vertical-composition
+      // contract (see getVerticalScaleCompensation's own comment)
+      // guarantees the generated track's natural (scale = 1) height
+      // equals openingHeight exactly, so at this frame's effective scale
+      // the track overflows the opening by openingHeight * (scale - 1)
+      // total, split evenly above/below -- the identical quantity
+      // applyZoomAnchor's own Y-anchor bound already derives, reusing
+      // CAMERA_VERTICAL_ANCHOR_REACH's same reserved margin rather than a
+      // second constant. Collapses smoothly to 0 the moment the track no
+      // longer overflows the opening (scale at or below neutral), and is
+      // re-derived fresh every frame from THIS frame's own scale, so a
+      // live zoom change shrinks/grows the available travel continuously
+      // with nothing to snap back from.
+      //
+      // viewportPanYRef (the zoom-anchor correction) and this free-pan
+      // term are two independent additive components of the same final
+      // trackY (see applyTransform's own comment) drawing from that same
+      // overflow budget -- reserving only whatever budget isn't already
+      // spent by viewportPanYRef's own current value guarantees the two
+      // can never combine to push either edge past the true derived
+      // boundary, without merging them into one shared bound.
+      const openingHeightForVerticalBounds = openingGeometryRef.current.height;
+      const verticalOverflowForFreePan = Math.max(
+        0,
+        openingHeightForVerticalBounds * (effectiveScale - 1),
+      );
+      const maxFreePanScreenY =
+        (verticalOverflowForFreePan / 2) * CAMERA_VERTICAL_ANCHOR_REACH;
+      const maxFreePanScreenYRemaining = Math.max(
+        0,
+        maxFreePanScreenY - Math.abs(viewportPanYRef.current),
+      );
+      const maxFreePanWorldY =
+        effectiveScale > 0
+          ? maxFreePanScreenYRemaining / effectiveScale
+          : maxFreePanScreenYRemaining;
+
+      const desiredDistanceY = movement.distanceY + worldDeltaY;
+      const hitUpperBoundY =
+        desiredDistanceY >= maxFreePanWorldY && currentVelocityY > 0;
+      const hitLowerBoundY =
+        desiredDistanceY <= -maxFreePanWorldY && currentVelocityY < 0;
+      movement.distanceY = clamp(
+        desiredDistanceY,
+        -maxFreePanWorldY,
+        maxFreePanWorldY,
+      );
+
+      if (hitUpperBoundY || hitLowerBoundY) {
+        // Same hard-stop precedent as movement.distance's own boundary
+        // check above: bottoming out against either derived edge kills
+        // the velocity outright rather than letting it decay, so panning
+        // back off the edge a few frames later never has a lingering
+        // phantom push still baked in.
+        movement.touchVelocityY = 0;
+      } else {
+        movement.touchVelocityY *= friction;
+      }
+
       updateGalleryMotion();
       animationFrame = requestAnimationFrame(animateGallery);
     };
@@ -5964,6 +6059,32 @@ function App() {
       }
 
       movement.touchVelocity = clamp(movement.touchVelocity + delta, -cap, cap);
+    };
+
+    // Archive touch-camera upgrade (vertical pan): the Y counterpart to
+    // addTouchPanVelocity immediately above -- identical guard/clamp/cap
+    // shape, same shared CAMERA_PAN_TOUCH_IMPULSE_COEFF/
+    // CAMERA_PAN_TOUCH_VELOCITY_CAP constants at the call site (see
+    // handleTouchMove's single-finger branch below), no new tuning.
+    // Deliberately does NOT touch movement.direction: that field is an
+    // X-axis-only semantic (browse direction, read solely by the
+    // Relationship Engine's relationshipMotion placement -- see its own
+    // usage above) and must stay governed exclusively by horizontal
+    // velocity exactly as before this pass, so a vertical-only drag can
+    // never flip it. No wheel/desktop code path calls this function --
+    // grep confirms it is only ever called from handleTouchMove's
+    // single-finger branch, same as addTouchPanVelocity itself.
+    const addTouchPanVelocityY = (
+      delta,
+      cap = CAMERA_PAN_TOUCH_VELOCITY_CAP,
+    ) => {
+      if (!movement.enabled || focusedIdRef.current !== null) return;
+
+      movement.touchVelocityY = clamp(
+        movement.touchVelocityY + delta,
+        -cap,
+        cap,
+      );
     };
 
     const handleWheel = (event) => {
@@ -6262,8 +6383,24 @@ function App() {
       // defaults -- see that constant's own comment. Finger-drag stays
       // exactly as directly responsive as it already was; only the shared
       // friction decay tail (below, in animateGallery) is different now.
+      //
+      // Archive touch-camera upgrade (vertical pan): deltaX and deltaY
+      // used to be summed into this ONE call, collapsing genuine vertical
+      // finger travel into horizontal camera motion -- the confirmed root
+      // cause of "vertical exploration is limited" from the completed
+      // audit. Each axis now gets its own call into its own channel, same
+      // coefficient/cap on both (no new tuning, parity first): a diagonal
+      // drag naturally drives both at once since both calls fire from the
+      // same touchmove frame off the same real deltaX/deltaY, a purely
+      // horizontal drag leaves deltaY (and therefore the Y channel) at
+      // exactly 0, and a purely vertical drag leaves deltaX (and the X
+      // channel) at exactly 0.
       addTouchPanVelocity(
-        (deltaX + deltaY) * CAMERA_PAN_TOUCH_IMPULSE_COEFF,
+        deltaX * CAMERA_PAN_TOUCH_IMPULSE_COEFF,
+        CAMERA_PAN_TOUCH_VELOCITY_CAP,
+      );
+      addTouchPanVelocityY(
+        deltaY * CAMERA_PAN_TOUCH_IMPULSE_COEFF,
         CAMERA_PAN_TOUCH_VELOCITY_CAP,
       );
     };
@@ -6407,6 +6544,26 @@ function App() {
       touchTotalMovement = 0;
     };
 
+    // Part 8 -- Resize/Orientation Hardening: regenerateGallery (bound to
+    // window resize elsewhere) resets camera scale/pan refs to neutral, but
+    // it has no access to this effect's own closure-scoped gesture-tracking
+    // state (pinchState/touchPoint/touchGestureStartPoint/touchTotalMovement).
+    // Without this, a resize or Safari dynamic-toolbar/orientation change
+    // mid-gesture leaves that state referencing a camera position that no
+    // longer exists, producing a stale-baseline jump on the next touchmove.
+    // This handler clears exactly that gesture-tracking state (plus the new
+    // free-Y-pan velocity, since a fresh gesture should start settled) so
+    // the next touch begins clean from the just-reset camera. It does NOT
+    // touch movement.touchVelocity (X) -- only the new Y channel, per spec.
+    // Passive: it never calls preventDefault, matching touchstart/touchcancel.
+    const handleGestureInvalidatingResize = () => {
+      pinchState = null;
+      touchPoint = null;
+      touchGestureStartPoint = null;
+      touchTotalMovement = 0;
+      movement.touchVelocityY = 0;
+    };
+
     updateGalleryMotion();
     animationFrame = requestAnimationFrame(animateGallery);
 
@@ -6422,6 +6579,9 @@ function App() {
     window.addEventListener("touchcancel", handleTouchCancel, {
       passive: true,
     });
+    window.addEventListener("resize", handleGestureInvalidatingResize, {
+      passive: true,
+    });
 
     return () => {
       focusTimelineRef.current?.kill();
@@ -6433,6 +6593,7 @@ function App() {
       window.removeEventListener("touchmove", handleTouchMove);
       window.removeEventListener("touchend", handleTouchEnd);
       window.removeEventListener("touchcancel", handleTouchCancel);
+      window.removeEventListener("resize", handleGestureInvalidatingResize);
     };
     // Continuous-Effect Stability pass: depends on gallerySessionId
     // instead of galleryItems -- see that state's own declaration comment.
