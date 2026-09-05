@@ -3841,49 +3841,6 @@ function App() {
   useEffect(() => {
     inspectedItemIdRef.current = inspectedItemId;
   }, [inspectedItemId]);
-  // TEMPORARY MOBILE DIAGNOSTIC HOOK (diagnosis-first pass, touch-event
-  // chain trace) -- a single mutable snapshot of the last real touch
-  // sequence and the last handleGalleryTileTap call, written from the
-  // window-level touch handlers below and from handleGalleryTileTap
-  // itself, never read by any rendering/behavioral code path. A ref
-  // (not state) so writing it on every touchmove frame never triggers a
-  // re-render. Exposed read-only via window.__urbanumMobileDebug() by
-  // the effect immediately below, for inspection over Safari Remote Web
-  // Inspector on a real device where this touch chain cannot be
-  // emulated. Remove this ref, the effect below, and every
-  // `mobileDebugRef.current.*` write once the real failing step is
-  // confirmed and fixed, unless asked to keep it as a standing
-  // diagnostic.
-  const mobileDebugRef = useRef({
-    lastTouchStart: null, // { x, y, t } -- raw touchstart client coords
-    guardStateAtLastTouchStart: null, // { isProjectFilterActive, isOverlayActive }
-    lastTouchStartBailedOnGuard: null, // true if handleTouchStart returned early on that guard
-    lastTouchEnd: null, // { x, y, t } -- raw touchend client coords (changedTouches)
-    movementDistancePx: null, // touchTotalMovement at/through touchend
-    gestureClassification: null, // "tap" | "drag" | null (isGenuineTap)
-    touchEndCount: 0, // how many touchend sequences have resolved at all
-    lastTappedItemId: null,
-    lastTappedProject: null, // item.project, unmodified
-    lastTappedArchiveNumber: null,
-    lastTappedWidthPx: null, // item.layout.width, parsed
-    lastTappedHeightPx: null, // item.layout.height, parsed
-    lastTappedIsThumbnailTier: null, // MOBILE_SELECTABLE_TILE_MIN_* floor -- only gates a non-Project tile's selection-surface eligibility and HoverOverlay's reduced thumbnail-inspected padding now; no longer decides View Project or navigation
-    lastTappedSelectableEligible: null, // !isThumbnailTier || isProjectLinked -- a Project-linked tile is always a selection surface, any tier
-    lastTappedViewProjectEligible: null, // isProjectLinked -- Final Mobile Interaction Model pass: View Project always attempts to render for any inspected, Project-linked tile now (tier-independent); HoverOverlay.jsx's own small measurement effect, not tier or a CSS breakpoint, decides whether it ends up actually visible
-    lastTappedOnEnterProjectExists: null, // isProjectLinked -- true for every Project-linked tile, any tier (no separate affordance tiers exist any more)
-    resultingInspectedItemId: null, // what handleGalleryTileTap set/would set
-    handleGalleryTileTapRan: false, // proves the click genuinely reached this handler at least once
-    handleGalleryTileTapCallCount: 0,
-    handleGalleryTileTapLastRanAt: null,
-    lastTappedWholeTileNavigated: false, // true only for the Thumbnail-tier second-tap-anywhere exception
-  });
-  useEffect(() => {
-    if (typeof window === "undefined") return undefined;
-    window.__urbanumMobileDebug = () => ({ ...mobileDebugRef.current });
-    return () => {
-      delete window.__urbanumMobileDebug;
-    };
-  }, []);
   // Mobile Archive Interaction Pass -- Stage 5: opening either overlay
   // (Menu or the mobile Search/discovery overlay -- the same OR
   // isOverlayActive above already tracks) dismisses any open inspection
@@ -4191,22 +4148,6 @@ function App() {
       const isThumbnailTier =
         width < MOBILE_SELECTABLE_TILE_MIN_WIDTH_PX ||
         height < MOBILE_SELECTABLE_TILE_MIN_HEIGHT_PX;
-      // TEMPORARY MOBILE DIAGNOSTIC HOOK -- proves this handler genuinely
-      // ran for this item (the synthetic click actually reached here) and
-      // snapshots exactly what it decided -- see mobileDebugRef's own
-      // declaration above for the full field list. Recomputed here with
-      // the exact same formula the render loop uses, independent of it,
-      // so a real discrepancy between the two would be visible rather
-      // than silently assumed equal.
-      mobileDebugRef.current.lastTappedItemId = item.id;
-      mobileDebugRef.current.lastTappedProject = item.project ?? null;
-      mobileDebugRef.current.lastTappedArchiveNumber =
-        item.archiveNumber ?? null;
-      mobileDebugRef.current.lastTappedWidthPx = width;
-      mobileDebugRef.current.lastTappedHeightPx = height;
-      mobileDebugRef.current.lastTappedIsThumbnailTier = isThumbnailTier;
-      mobileDebugRef.current.lastTappedSelectableEligible =
-        !isThumbnailTier || isProjectLinked;
       // Final Mobile Interaction Model pass: onEnterProject/View Project
       // eligibility is simply isProjectLinked now -- tier plays no part,
       // there is no separate affordance per tier, and there is no live
@@ -4216,14 +4157,7 @@ function App() {
       // HoverOverlay's reduced thumbnail-inspected padding, plus whether
       // a non-Project tile is a selection surface at all (the branch
       // just below).
-      mobileDebugRef.current.lastTappedOnEnterProjectExists = isProjectLinked;
-      mobileDebugRef.current.lastTappedViewProjectEligible = isProjectLinked;
-      mobileDebugRef.current.handleGalleryTileTapRan = true;
-      mobileDebugRef.current.handleGalleryTileTapCallCount += 1;
-      mobileDebugRef.current.handleGalleryTileTapLastRanAt = performance.now();
       if (isThumbnailTier && !isProjectLinked) {
-        mobileDebugRef.current.resultingInspectedItemId = null;
-        mobileDebugRef.current.lastTappedWholeTileNavigated = false;
         setInspectedItemId(null);
         return;
       }
@@ -4235,15 +4169,9 @@ function App() {
       // tile (any tier); the first tap on any tile always falls through
       // to the plain inspect/toggle logic below.
       if (isProjectLinked && wasInspected) {
-        mobileDebugRef.current.resultingInspectedItemId = item.id;
-        mobileDebugRef.current.lastTappedWholeTileNavigated = true;
         handleProjectRowImageClick(item);
         return;
       }
-      mobileDebugRef.current.lastTappedWholeTileNavigated = false;
-      mobileDebugRef.current.resultingInspectedItemId = wasInspected
-        ? null
-        : item.id;
       // Mobile Header/Search/Menu Refinement Pass -- Section 6 (Haptics): a
       // genuine inspection tap gets a single, subtle tick -- but only on the
       // tap that OPENS the card, never the second tap that dismisses it (a
@@ -6198,20 +6126,9 @@ function App() {
       // handler now steps aside consistently rather than three of four
       // doing so). Overlay guard (Menu/mobile Search open) included for
       // the same reason -- see isOverlayActiveRef's own comment.
-      // TEMPORARY MOBILE DIAGNOSTIC HOOK -- records the exact guard
-      // state at every touchstart, whether or not it ends up bailing
-      // below. Rules in/out the hypothesis that isProjectFilterActive/
-      // isOverlayActive is unexpectedly stuck true, silently swallowing
-      // every Archive tap before touchGestureStartPoint is ever set.
-      mobileDebugRef.current.guardStateAtLastTouchStart = {
-        isProjectFilterActive: isProjectFilterActiveRef.current,
-        isOverlayActive: isOverlayActiveRef.current,
-      };
       if (isProjectFilterActiveRef.current || isOverlayActiveRef.current) {
-        mobileDebugRef.current.lastTouchStartBailedOnGuard = true;
         return;
       }
-      mobileDebugRef.current.lastTouchStartBailedOnGuard = false;
 
       // Mobile Baseline Pass -- Task 3: the moment a second finger lands,
       // pinchState is (re)initialized from the CURRENT two-finger
@@ -6268,11 +6185,6 @@ function App() {
       touchGestureStartPoint = touchPoint;
       touchGestureStartTime = performance.now();
       touchTotalMovement = 0;
-      // TEMPORARY MOBILE DIAGNOSTIC HOOK -- raw touchstart coordinates
-      // for the sequence that just began.
-      mobileDebugRef.current.lastTouchStart = touch
-        ? { x: touch.clientX, y: touch.clientY, t: touchGestureStartTime }
-        : null;
     };
 
     const handleTouchMove = (event) => {
@@ -6373,10 +6285,6 @@ function App() {
       // so this never diverges from what the visitor's finger actually
       // did.
       touchTotalMovement += Math.hypot(deltaX, deltaY);
-      // TEMPORARY MOBILE DIAGNOSTIC HOOK -- live running movement
-      // distance for the in-progress sequence (handleTouchEnd below
-      // writes the same field again once the sequence resolves).
-      mobileDebugRef.current.movementDistancePx = touchTotalMovement;
       // Weighted Dial Pan Feel pass: explicitly applies the exact prior
       // shared coefficient/cap (CAMERA_PAN_TOUCH_IMPULSE_COEFF = 0.16,
       // CAMERA_PAN_TOUCH_VELOCITY_CAP = 42) rather than the new wheel-side
@@ -6482,24 +6390,6 @@ function App() {
         touchGestureStartPoint !== null &&
         touchTotalMovement <= TAP_MOVEMENT_THRESHOLD_PX &&
         performance.now() - touchGestureStartTime <= TAP_MAX_DURATION_MS;
-
-      // TEMPORARY MOBILE DIAGNOSTIC HOOK -- final touchend coordinates
-      // (changedTouches, not touches -- touches is already empty by the
-      // time the last finger lifts) plus the exact tap-vs-drag verdict
-      // this sequence resolved to.
-      const debugEndTouch = event.changedTouches && event.changedTouches[0];
-      mobileDebugRef.current.lastTouchEnd = debugEndTouch
-        ? {
-            x: debugEndTouch.clientX,
-            y: debugEndTouch.clientY,
-            t: performance.now(),
-          }
-        : null;
-      mobileDebugRef.current.movementDistancePx = touchTotalMovement;
-      mobileDebugRef.current.gestureClassification = isGenuineTap
-        ? "tap"
-        : "drag";
-      mobileDebugRef.current.touchEndCount += 1;
 
       if (!isGenuineTap) {
         // This was a drag (or a stray post-pinch release) -- suppress the
