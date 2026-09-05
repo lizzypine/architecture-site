@@ -430,6 +430,31 @@ const CAMERA_ZOOM_SETTLE_EPSILON = 0.0005;
 // well before the opening's true boundary.
 const CAMERA_VERTICAL_ANCHOR_REACH = 0.88;
 
+// Default-overview Y lock (real-device refinement pass): at the mobile
+// default overview (MOBILE_DEFAULT_CAMERA_SCALE = 1.05, untouched),
+// free one-finger vertical pan should read as effectively locked --
+// horizontal one-finger exploration stays fully active, and PINCH's own
+// midpoint Y-anchor correction (viewportPanYRef/applyZoomAnchor,
+// completely separate and untouched by this) remains fully 2D at every
+// scale. Only the FREE-pan budget derived in animateGallery below is
+// gated. CAMERA_FREE_PAN_Y_ACTIVATION_SCALE sits far enough above the
+// default that ordinary zoom-ease settle/rounding noise around 1.05
+// never crosses it, while a real, deliberate pinch -- which moves scale
+// by whole increments of CAMERA_ZOOM_STEP (0.25) per discrete step, and
+// far more per an actual two-finger gesture -- clears it almost
+// immediately. CAMERA_FREE_PAN_Y_FULL_SCALE is where the existing,
+// already-derived geometry budget becomes fully available; between the
+// two, the budget ramps linearly from 0 to that full value every frame
+// (see freePanYActivation below) rather than snapping open the instant
+// the threshold is crossed, and -- since this ramp is recomputed fresh
+// from the LIVE effective scale every frame, the same way the geometry
+// budget itself already was -- zooming back down through this same
+// range automatically shrinks the budget back toward 0 in lockstep,
+// which is also what cleanly recenters any accumulated free-Y offset on
+// the way back to overview with no separate reset needed.
+const CAMERA_FREE_PAN_Y_ACTIVATION_SCALE = 1.15;
+const CAMERA_FREE_PAN_Y_FULL_SCALE = 1.35;
+
 // Weighted Dial Pan Feel pass: friction/impulse/cap constants for the
 // EXISTING velocity+friction pan model (see animateGallery/
 // addGalleryVelocity in App()) -- no new physics system, this pass only
@@ -5918,8 +5943,27 @@ function App() {
         0,
         openingHeightForVerticalBounds * (effectiveScale - 1),
       );
+      // Default-overview Y lock: a 0-1 activation factor, re-derived
+      // fresh from THIS frame's own live effectiveScale exactly like
+      // every other quantity in this block -- 0 at/below
+      // CAMERA_FREE_PAN_Y_ACTIVATION_SCALE (free Y pan fully locked),
+      // ramping linearly to 1 by CAMERA_FREE_PAN_Y_FULL_SCALE (the
+      // existing geometry-derived budget below fully available). Purely
+      // a multiplier on the free-pan ceiling itself -- everything below
+      // (the "remaining budget" subtraction against viewportPanYRef,
+      // the hard-stop-at-bound velocity zeroing, the clamp) is
+      // completely unchanged, and pinch's own Y-anchor correction never
+      // reads this factor at all.
+      const freePanYActivation = clamp(
+        (effectiveScale - CAMERA_FREE_PAN_Y_ACTIVATION_SCALE) /
+          (CAMERA_FREE_PAN_Y_FULL_SCALE - CAMERA_FREE_PAN_Y_ACTIVATION_SCALE),
+        0,
+        1,
+      );
       const maxFreePanScreenY =
-        (verticalOverflowForFreePan / 2) * CAMERA_VERTICAL_ANCHOR_REACH;
+        (verticalOverflowForFreePan / 2) *
+        CAMERA_VERTICAL_ANCHOR_REACH *
+        freePanYActivation;
       const maxFreePanScreenYRemaining = Math.max(
         0,
         maxFreePanScreenY - Math.abs(viewportPanYRef.current),

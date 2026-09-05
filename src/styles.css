@@ -4007,8 +4007,21 @@ html.is-browsing .zoom-controls {
     gap: clamp(28px, 6vw, 44px);
   }
 
+  /* Mobile fidelity correction (Josh mockup: image above text): the
+     desktop grid above has no `order` on either child, so it simply
+     stacks them in DOM order once collapsed to one column --
+     .contact-layout (text) is the FIRST DOM child (see
+     ContactPage.jsx), so it rendered above the photo on mobile, which
+     does not match the approved mobile mockup's image -> text -> social
+     hierarchy. This is a pure CSS `order` swap, scoped to this existing
+     ≤900px stacking rule only -- no DOM reorder in ContactPage.jsx, no
+     change to .contact-layout's own content/copy, and no effect on the
+     901px+ side-by-side grid above (a two-column row has no "which
+     comes first" reading order in the same sense a stacked column
+     does, so desktop is intentionally left alone). */
   .contact-page-layout__image {
     width: 100%;
+    order: -1;
   }
 }
 
@@ -4894,10 +4907,35 @@ html.is-browsing .zoom-controls {
    proportions at these widths (a modest, viewport-relative margin, not
    a fixed floor that ignores how narrow the viewport is) instead of
    just lowering the existing floor by an arbitrary amount. */
+/* Mobile fidelity correction (Josh mockup: image should approach
+   available viewport width): audited the full constraint chain first
+   -- .project-viewer/.project-image-column/.project-image-frame/
+   .project-image-frame__inner carry no width/max-width of their own at
+   all (.project-image-column is simply flex: 1 1 auto inside
+   .project-viewer, a plain block filling .project-content's own
+   content-box), and .project-image-frame__img's own max-width: 100%
+   (untouched) resolves directly against that same content-box. So for
+   any image wide enough to actually reach that cap (the common,
+   landscape case -- a portrait/tall image stays governed by its own
+   untouched max-height formula instead, exactly as it should, and is
+   unaffected by this), THIS padding -- not any width rule closer to the
+   image itself -- is the one real, adjustable source actually limiting
+   how wide it can render. Tightened, not removed: still a real,
+   deliberate gutter (clamp(16px, 4vw, 32px) resolves to ~16-18px at
+   ordinary phone widths, vs. the prior ~20-21px -- the same clamp
+   shape, uniformly scaled down rather than an arbitrary new curve), so
+   the image gains meaningful width without reading as full-bleed.
+   Scoped to this one existing ≤900px breakpoint, same as before --
+   901px+ is untouched. .project-breadcrumb's own mobile `right` value
+   just below in this file is an explicit, intentional duplicate of
+   this exact formula (see that rule's own comment) and is updated
+   alongside it so the mobile X's right edge stays flush with the
+   image/nav-row's own new, wider right edge -- not a separate,
+   unrelated change. */
 @media (max-width: 900px) {
   .project-content {
-    padding-left: clamp(20px, 5vw, 40px);
-    padding-right: clamp(20px, 5vw, 40px);
+    padding-left: clamp(16px, 4vw, 32px);
+    padding-right: clamp(16px, 4vw, 32px);
   }
 }
 
@@ -5068,7 +5106,11 @@ html.is-browsing .zoom-controls {
   .project-breadcrumb {
     position: absolute;
     top: calc(var(--safe-area-inset-top) + 82px);
-    right: clamp(20px, 5vw, 40px);
+    /* Kept byte-for-byte in sync with .project-content's own mobile
+       padding-right formula just above in this file (now clamp(16px,
+       4vw, 32px), tightened by the mobile image-width correction) --
+       see that rule's own comment on why the two must always match. */
+    right: clamp(16px, 4vw, 32px);
     margin: 0;
     z-index: 2;
   }
@@ -6052,11 +6094,36 @@ html.is-browsing .zoom-controls {
    Desktop (901px+, outside this block) keeps the exact min(420px, 60%)
    value it always had. */
 @media (max-width: 900px) {
+  /* Mobile fidelity correction (Josh mockup: left-aligned editorial
+     column, not a centered narrow measure): the desktop base rule's own
+     margin: 0 auto + max-width: min(420px, 60%) (widened to min(560px,
+     90%) by the previous mobile pass, directly above) -- and its
+     text-align: center, inherited by title/location/year/themes below
+     and set explicitly again on .project-info-panel__description just
+     beneath this block -- are both a deliberate DESKTOP decision (see
+     this file's own "Desktop Project Page visual-matching pass"
+     comment on the base rule), never previously given a mobile-specific
+     override. Removing the horizontal centering and width cap here
+     lets this element span the full width .project-info-panel already
+     provides (position: absolute; inset: 0 against .project-viewer),
+     with padding (unchanged, clamp(24px, 3vw, 40px) below) supplying
+     the only gutter -- that existing clamp's own floor already
+     resolves to 24px at ordinary phone widths (its 3vw term only
+     exceeds 24px above ~800px), matching the mockup's own ~24-32px
+     gutters without hardcoding a new value. text-align: left then
+     cascades to the identity block (title/location/year) and Themes
+     line, none of which set their own alignment -- only
+     .project-info-panel__description needs its own explicit override,
+     immediately below, since it hardcodes text-align: center itself.
+     Desktop (901px+, outside this block) is completely untouched: same
+     centered column, same center-aligned text, exactly as before. */
   .project-info-panel__inner {
     justify-content: flex-start;
     overflow-y: auto;
     -webkit-overflow-scrolling: touch;
-    max-width: min(560px, 90%);
+    max-width: none;
+    margin: 0;
+    text-align: left;
   }
 }
 
@@ -6162,6 +6229,21 @@ html.is-browsing .zoom-controls {
   line-height: 1.55;
   color: #5a5a5a;
   text-align: center;
+}
+
+/* Mobile fidelity correction (Josh mockup): this rule's own text-align:
+   center above is an explicit, hardcoded override of the inherited
+   value specifically so a future edit to the parent's alignment can't
+   silently change it (see that rule's own comment) -- which means the
+   mobile-only text-align: left just added to .project-info-panel__inner
+   needs the identical explicit counter-override here, at the same
+   breakpoint, or this one line would stay centered while title/
+   location/year/themes around it turned left-aligned. Font size/
+   weight/line-height/color/margin are completely untouched. */
+@media (max-width: 900px) {
+  .project-info-panel__description {
+    text-align: left;
+  }
 }
 
 /* Global GT America weight calibration: this is the one RichText
