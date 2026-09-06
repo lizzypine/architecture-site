@@ -249,12 +249,49 @@ async function main() {
   }
 }
 
+// CANONICAL-TAG-DUPLICATION FIX: writeHomepageMetadata() below both READS
+// dist/index.html (as this run's pristineTemplate) and WRITES its result
+// back to that same path -- and every route's own render below reuses
+// that same pristineTemplate as its base too. The old injection here was
+// a bare `.replace(/<title>.*?<\/title>/, metaHtml)`, which only ever
+// swaps the <title> tag itself. Each run's metaHtml starts with a fresh
+// <title>, so the replace kept succeeding -- but everything the PREVIOUS
+// run had already injected after that <title> (description, canonical,
+// og:*, twitter:*) was never part of the matched text, so it was never
+// removed. Every subsequent run stacked one more copy of that block
+// after the new one, compounding across every prerender.mjs run this
+// engagement has ever made -- which is why already-committed routes
+// (/practice, /practice/questions) showed the exact same duplicate `/`
+// canonical this route's own metadata never even mentions: they were
+// rendered from this same accumulating dist/index.html template, not
+// from anything wrong with their own individual metadata entries.
+//
+// Fix: metadata.mjs's buildHeadMetadataHtml() now wraps its whole block
+// in "<!-- urbanum-seo-metadata:start/:end -->" markers. This helper
+// replaces that ENTIRE marked block when one is already present (any
+// re-run against an already-injected template), and only falls back to
+// the old bare-<title> replace the very first time, against a truly
+// pristine `dist/index.html` fresh off `vite build` (source index.html's
+// own plain <title>urbanum</title>, no injected block yet). Idempotent
+// either way -- re-running this script any number of times now leaves
+// exactly one metadata block, never an accumulating stack.
+const SEO_METADATA_BLOCK = /<!-- urbanum-seo-metadata:start -->[\s\S]*?<!-- urbanum-seo-metadata:end -->/;
+
+function injectHeadMetadata(template, metaHtml) {
+  if (SEO_METADATA_BLOCK.test(template)) {
+    return template.replace(SEO_METADATA_BLOCK, metaHtml);
+  }
+  return template.replace(/<title>.*?<\/title>/, metaHtml);
+}
+
 // Renders one route's component to a string and writes it into a fresh
 // copy of the pristine dist/index.html template, with metaHtml replacing
-// the template's existing <title>...</title> tag. Returns a small result
-// record instead of throwing, so one route's failure doesn't abort the
-// whole run. Refuses outright to ever write to dist/index.html itself --
-// that path is reserved exclusively for writeHomepageMetadata() below.
+// the template's existing injected head-metadata block (or, on a truly
+// pristine template, its bare <title>...</title> tag -- see
+// injectHeadMetadata() immediately above). Returns a small result record
+// instead of throwing, so one route's failure doesn't abort the whole
+// run. Refuses outright to ever write to dist/index.html itself -- that
+// path is reserved exclusively for writeHomepageMetadata() below.
 async function renderRouteToFile({ urlPath, outFile, pristineTemplate, loadComponent, metaHtml }) {
   try {
     windowShim.location.pathname = urlPath;
@@ -274,7 +311,7 @@ async function renderRouteToFile({ urlPath, outFile, pristineTemplate, loadCompo
         outFile: null,
       };
     }
-    let html = pristineTemplate.replace(/<title>.*?<\/title>/, metaHtml);
+    let html = injectHeadMetadata(pristineTemplate, metaHtml);
 
     const rootMatches = html.match(/<div id="root"><\/div>/g) ?? [];
     if (rootMatches.length !== 1) {
@@ -328,7 +365,7 @@ async function writeHomepageMetadata(pristineTemplate) {
         error: "Expected exactly one <title> tag in dist/index.html template",
       };
     }
-    const html = pristineTemplate.replace(/<title>.*?<\/title>/, metaHtml);
+    const html = injectHeadMetadata(pristineTemplate, metaHtml);
 
     const bodyOf = (s) => s.slice(s.indexOf("<body"));
     const bodyUnchanged = bodyOf(html) === bodyOf(pristineTemplate);

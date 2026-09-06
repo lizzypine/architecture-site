@@ -224,5 +224,15 @@ export function buildHeadMetadataHtml({ urlPath, title, description, ogType, ogI
     lines.push(`<meta name="twitter:image" content="${absoluteImage}" />`);
   }
 
-  return lines.join("\n    ");
+  // Wrapped in a pair of unique HTML comment markers so
+  // scripts/prerender.mjs's injectHeadMetadata() can always find and
+  // replace this ENTIRE block on any later run, not just the bare
+  // <title> tag inside it -- see that function's own comment for the
+  // canonical-tag-duplication bug this fixes. Purely additive: no tag,
+  // value, or canonical strategy above this line changed.
+  return [
+    "<!-- urbanum-seo-metadata:start -->",
+    ...lines,
+    "<!-- urbanum-seo-metadata:end -->",
+  ].join("\n    ");
 }
