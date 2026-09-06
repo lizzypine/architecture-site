@@ -137,40 +137,42 @@ export default function Router() {
   return (
     <>
       {renderPage()}
-      {/* Utility Information Phase: one site-wide, minimal, real <a href>
-          to /site-information, bottom-right, fixed (styling in
-          styles.css's own ".site-utility-link" rule). Mounted exactly
-          once, here -- Router is the only point every route already
-          passes through, so this is the smallest way to make the link
-          genuinely persistent without touching Archive/Projects/Contact/
-          Journal/Practice/ProjectTemplate (all under visual lock)
-          individually. Plain preventDefault-then-navigate on an
-          unmodified left click only -- a real href, so it still works
-          with JS disabled and in a prerendered snapshot. Deliberately no
-          beginPageTransition() fade: that's Header's own nav
-          choreography, out of scope for this minimal link per
-          instruction ("no animation beyond existing global link
-          behavior"). */}
-      <a
-        href="/site-information"
-        className="site-utility-link"
-        onClick={(event) => {
-          if (
-            event.defaultPrevented ||
-            event.button !== 0 ||
-            event.metaKey ||
-            event.ctrlKey ||
-            event.shiftKey ||
-            event.altKey
-          ) {
-            return;
-          }
-          event.preventDefault();
-          navigate("/site-information");
-        }}
-      >
-        © Urbānum
-      </a>
+      {/* Utility Information Phase: one minimal, real <a href> to
+          /site-information, bottom-right, fixed (styling in
+          styles.css's own ".site-utility-link" rule). Mounted here in
+          Router rather than inside any individual page component, same
+          as before -- but now homepage-only (path === "/"): the client
+          asked for this exact link to appear only on the Archive route,
+          not on every interior page, so this is that single added
+          condition, nothing else restructured. Plain
+          preventDefault-then-navigate on an unmodified left click only --
+          a real href, so it still works with JS disabled and in a
+          prerendered snapshot. Deliberately no beginPageTransition()
+          fade: that's Header's own nav choreography, out of scope for
+          this minimal link per instruction ("no animation beyond
+          existing global link behavior"). */}
+      {path === "/" && (
+        <a
+          href="/site-information"
+          className="site-utility-link"
+          onClick={(event) => {
+            if (
+              event.defaultPrevented ||
+              event.button !== 0 ||
+              event.metaKey ||
+              event.ctrlKey ||
+              event.shiftKey ||
+              event.altKey
+            ) {
+              return;
+            }
+            event.preventDefault();
+            navigate("/site-information");
+          }}
+        >
+          © Urbānum
+        </a>
+      )}
     </>
   );
 }
