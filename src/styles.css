@@ -1741,6 +1741,41 @@ body {
   opacity: 0.75;
 }
 
+/* Archive Number -- Project Link Affordance pass: for project-linked
+   items only, on desktop only (see HoverOverlay.jsx's own render
+   condition -- this modifier class is added alongside the base
+   .hover-overlay__number only when onEnterProject is present and the
+   card is not touch-inspected), Archive Number becomes a real "open this
+   Project" control rather than a plain label. Reuses two already-
+   established conventions verbatim rather than inventing new ones:
+   pointer-events opt-in scoped to .gallery-track:not(.is-scrolling),
+   exactly like .hover-overlay__themes li immediately above (so a pan/
+   scroll gesture passing over a tile can never register as an
+   accidental click/navigation), and the identical Lexicon opacity/
+   transition pairing (120ms ease-out / 0.75) reused exactly, not
+   re-derived. No underline, movement, scale, font-weight, or color
+   change -- opacity is the only property this adds beyond cursor. Base
+   .hover-overlay__number's own font-size/color/etc. (above) are
+   completely untouched; this is purely an additive modifier class. */
+.hover-overlay__number--clickable {
+  cursor: pointer;
+  transition: opacity 120ms ease-out;
+}
+
+.gallery-track:not(.is-scrolling) .hover-overlay__number--clickable {
+  pointer-events: auto;
+}
+
+.hover-overlay__number--clickable:hover,
+.hover-overlay__number--clickable:focus-visible {
+  /* Contrast pass: raised from 0.75 (Lexicon's own value) to a more
+     visible 0.5 -- this one control's own deliberate departure from the
+     Lexicon convention it otherwise still matches (transition timing/
+     easing, cursor, pointer-events opt-in all unchanged), per explicit
+     instruction that 0.75 read as too subtle here specifically. */
+  opacity: 0.5;
+}
+
 /* Mobile Archive Interaction Pass -- Stage 5: the explicit "enter the
    Project" control, only ever present while a Project-linked tile is
    touch-inspected (see HoverOverlay.jsx's own isInspected && onEnterProject
@@ -1901,7 +1936,19 @@ body {
      above still give it a real, comfortable tap target (the standard
      44px), it's just invisible: nothing paints a boundary around it, so
      it reads purely as small, editorial text sitting under the Archive
-     Number, not a button. */
+     Number, not a button.
+
+     Correction (Archive Number -- Project Link Affordance pass): a prior
+     pass briefly replaced this control's own independent transition/
+     hover values with Lexicon's (.hover-overlay__themes li's) values --
+     that was a mistake specific to THIS control (View Project is a
+     mobile-only affordance, unrelated to Lexicon's desktop hover
+     convention) and is reverted here to the original values View
+     Project always had. Lexicon's own convention is now instead reused
+     for the NEW clickable Archive Number affordance
+     (.hover-overlay__number--clickable, below Themes' own rules), which
+     is the actual desktop/Lexicon-adjacent control this convention
+     belongs to. */
   transition: opacity 0.25s ease;
 }
 
@@ -5072,10 +5119,25 @@ html.is-browsing .zoom-controls {
    .project-viewer -- see ProjectBreadcrumb.jsx's own comment for why this
    placement structurally guarantees it never competes with the Project
    Information trigger / Archive Number / Image Navigation row further
-   down. Desktop and mobile share this same rule -- no breakpoint override
-   -- since the requirement is identical on both. */
+   down.
+
+   "< Archive" Typography + Spacing pass (desktop-only in effect): this
+   margin-bottom is the one value directly, exclusively governing the gap
+   between this link and .project-viewer beneath it (the mobile override
+   just below sets margin: 0 outright on the absolutely positioned mobile
+   control, so this base value has never had any visual effect on mobile
+   -- "desktop-only in effect" without needing its own breakpoint block).
+   Tightened from clamp(14px, 1.8vw, 22px) -- the smallest lever available
+   for this: .project-content's own flex `gap` beneath this margin (which
+   also separates every other one of its children) and .project-viewer's
+   own separate, already-tuned margin-top (its own "image top padding
+   refinement," a different concern) are both left completely untouched,
+   so neither the relationship between .project-viewer/.project-image-
+   nav-row nor any other spacing on this page shifts -- only this one
+   link's own trailing space shrinks. Same clamp shape, smaller numbers,
+   so it still scales with viewport width exactly as before. */
 .project-breadcrumb {
-  margin-bottom: clamp(14px, 1.8vw, 22px);
+  margin-bottom: clamp(6px, 0.9vw, 10px);
 }
 
 /* Desktop Project Page visual-matching pass (Josh review): "make it fully
@@ -5146,14 +5208,25 @@ html.is-browsing .zoom-controls {
 
 /* "Archive" itself: explicitly NOT uppercase (see this file's own top
    comment on the shared-treatment regression this corrects) -- renders
-   with its own natural capital-A/lowercase-remainder JSX casing. A
-   lighter letter-spacing than the shared 0.1em (calibrated for uppercase
-   glyphs), restrained enough to read as ordinary editorial tracking on
-   mixed-case text rather than the widely-letterspaced, all-caps
-   convention this pass explicitly moves away from. */
+   with its own natural capital-A/lowercase-remainder JSX casing.
+
+   "< Archive" Typography + Spacing pass: letter-spacing raised to 0.15em
+   -- the site's own approximate CSS equivalent of "150 tracking" -- from
+   the previous 0.03em (itself a deliberately lighter value than the
+   shared 0.1em uppercase treatment, calibrated for mixed-case text; that
+   reasoning no longer applies now that a specific tracking value has
+   been requested directly). Scoped to this one selector only: the
+   chevron span (.project-breadcrumb__chevron, its own rule just above)
+   keeps its own explicit `letter-spacing` omission -- a single glyph has
+   no internal kerning for tracking to affect, and the visible gap
+   between chevron and label is still produced entirely by
+   .project-breadcrumb__control's own flex `gap: 0.35em`, untouched here.
+   font family/size/weight/color, hover behavior, and this control's
+   position are all inherited from .project-breadcrumb__control, likewise
+   untouched. */
 .project-breadcrumb__label {
   text-transform: none;
-  letter-spacing: 0.03em;
+  letter-spacing: 0.15em;
 }
 
 /* Mobile back-control pass (client-approved): hidden by default (desktop/

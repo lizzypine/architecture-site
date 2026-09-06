@@ -636,6 +636,52 @@ function HoverOverlay({
               View Project →
             </div>
           </div>
+        ) : onEnterProject ? (
+          // Archive Number -- Project Link Affordance pass: desktop-only
+          // in effect (this branch only ever runs when NOT isInspected --
+          // isInspected is always false on desktop, see this component's
+          // own top comment -- and onEnterProject is only ever passed for
+          // Project-linked tiles, its mere presence deciding this exactly
+          // like it already decides View Project's own render eligibility
+          // above). Reuses onEnterProject verbatim -- the exact same
+          // handleProjectRowImageClick fade-then-navigate function View
+          // Project and the second-tap-anywhere path already call -- so
+          // clicking Archive Number lands on the identical Project/image
+          // as clicking the tile's own image, with no second routing
+          // path. event.stopPropagation() mirrors
+          // .hover-overlay__enter-project's own onClick immediately
+          // above: without it, this click would also bubble to
+          // .gallery-image-wrapper's own onClick and fire the image's
+          // desktop navigation a second time on top of this one.
+          // role="button" + tabIndex={-1} + onKeyDown mirrors the exact
+          // same convention the Themes list already uses just below
+          // (tabIndex={isInspected ? 0 : -1} there -- always -1 here
+          // since this branch itself only ever renders while !isInspected)
+          // rather than a plain tabIndex={0}: this card is aria-hidden
+          // whenever it isn't inspected (see this component's own
+          // aria-hidden={!isInspected} above), and a keyboard-focusable
+          // descendant of an aria-hidden ancestor is unreachable/
+          // confusing for assistive tech regardless of its own tabIndex,
+          // the same reasoning already documented on Themes' own tabIndex.
+          // Mouse/pointer interaction (styles.css's own
+          // .hover-overlay__number--clickable) is unaffected by tabIndex
+          // either way, exactly like Themes today. onKeyDown reuses
+          // handleEnterProjectKeyDown verbatim -- the exact same Enter/
+          // Space handler View Project's own control already uses, not a
+          // second keyboard implementation.
+          <div
+            className="hover-overlay__number hover-overlay__number--clickable"
+            role="button"
+            tabIndex={-1}
+            onClick={(event) => {
+              event.stopPropagation();
+              onEnterProject();
+            }}
+            onKeyDown={handleEnterProjectKeyDown}
+            aria-label="View project"
+          >
+            {`[${archiveNumber}]`}
+          </div>
         ) : (
           <div className="hover-overlay__number">{`[${archiveNumber}]`}</div>
         ))}

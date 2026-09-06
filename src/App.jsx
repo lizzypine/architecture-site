@@ -6744,6 +6744,29 @@ function App() {
   // current render window.
   useEffect(() => {
     const intervalId = window.setInterval(() => {
+      // Archive Performance -- Defer Quality Promotion Until Idle: skip
+      // this tick entirely while the camera hasn't genuinely settled
+      // yet, reusing isFieldSettledRef -- the exact same gate the
+      // camera loop itself already maintains for the analogous "wait
+      // for real idle, not just a momentary pause" need elsewhere in
+      // this file (see that ref's own comment above: true only once
+      // BOTH the scroll/zoom-idle timeout and the short post-motion
+      // settle grace beat have elapsed). Before this gate, this whole
+      // block ran on every poll tick regardless of motion -- so an
+      // active pinch/zoom or pan gesture was doing this
+      // querySelectorAll/sizes-attribute DOM write (which triggers the
+      // browser's own decode/render/compositing work) WHILE the camera
+      // was still actively moving, which is exactly what read as added
+      // weight during the gesture. Skipping unsettled ticks costs
+      // nothing: promotedImageSizesRef is a high-water-mark that only
+      // ever grows, so the very next tick after the camera actually
+      // settles runs this identical calculation against the camera's
+      // final resting scale and promotes whatever still needs it --
+      // never a missed promotion, never a downgrade, just deferred
+      // until the gesture is over. No new timer, no camera/render-
+      // window/virtualization change of any kind -- one early return.
+      if (!isFieldSettledRef.current) return;
+
       const scale = viewportScaleRef.current || 1;
       const dpr = window.devicePixelRatio || 1;
 
