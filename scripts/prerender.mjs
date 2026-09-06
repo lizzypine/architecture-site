@@ -1,11 +1,10 @@
 // PHASE 1 -- prerender mechanism (productionized from the proven
-// /practice-only experiment). Still run manually (node scripts/prerender.mjs),
-// still NOT wired into `npm run build`, still adds nothing to package.json
-// or vercel.json. Scope is deliberately narrow: render real page
-// components to real HTML and inject that HTML into dist/<route>/index.html.
-// No per-route <title>/<meta description>/canonical/JSON-LD -- that is a
-// separate, later metadata phase. No FAQ content, no sitemap, no robots,
-// no redirects. "/" (Archive) is never rendered through React here at all.
+// /practice-only experiment), extended in PHASE 2 with centralized SEO
+// metadata injection (scripts/seo/metadata.mjs). Still run manually
+// (node scripts/prerender.mjs), still NOT wired into `npm run build`,
+// still adds nothing to package.json or vercel.json. No JSON-LD, no FAQ
+// content, no sitemap, no robots, no redirects -- all explicitly out of
+// scope for this phase.
 //
 // Usage: node scripts/prerender.mjs
 // Requires a fresh dist/ (e.g. `npx vite build --emptyOutDir=false`, or
@@ -20,24 +19,19 @@ import path from "node:path";
 import os from "node:os";
 import process from "node:process";
 import { FIXED_ROUTES, PROJECT_TEMPLATE_COMPONENT_PATH } from "./seo/routes.mjs";
+import { FIXED_ROUTE_METADATA, buildHeadMetadataHtml, buildProjectMetadata } from "./seo/metadata.mjs";
 
 // -----------------------------------------------------------------------
 // KNOWN, DELIBERATE SHIM -- unchanged in spirit from the /practice proof.
 // Header.jsx's useCurrentPath() (src/navigation.js) reads
 // window.location.pathname inside a useState LAZY INITIALIZER -- i.e. at
 // render time, not inside an effect -- so it throws under plain Node
-// unless `window` exists at all. The SSR-safety audit for this phase
-// (ContactPage, ProjectsPage, JournalPage, ProjectTemplate, and their
-// directly-rendered dependencies: projectContent.js, ProjectBreadcrumb,
-// ImageViewer, ImageNavigation, ProjectArchiveIndex, ProjectInfoPanel)
-// found no other render-time window/document/navigator/Math.random
-// usage anywhere in any of those trees -- every window/document
-// reference in them (ImageViewer's fade timers, ProjectTemplate's
-// trackpad-scroller setup) is inside a useEffect, which never runs
-// during renderToString. So the same single minimal stub is still
-// enough. pathname is updated per-route below (not fixed to one value)
-// so Header's own nav-highlight state matches whichever page is
-// currently being rendered.
+// unless `window` exists at all. The Phase 1 SSR-safety audit (Contact,
+// Projects, Journal, ProjectTemplate, and their directly-rendered
+// dependencies) found no other render-time window/document/navigator/
+// Math.random usage anywhere in any of those trees. pathname is updated
+// per-route below so Header's own nav-highlight state matches whichever
+// page is currently being rendered.
 // -----------------------------------------------------------------------
 const windowShim = {
   location: { pathname: "/" },
@@ -63,18 +57,11 @@ async function main() {
     process.exit(1);
   }
 
-  // Safety net: dist/index.html (Archive's own file) must never be a
-  // write target for this script. Recorded once up front so it can be
-  // diffed again after every route is written (see the summary at the
-  // end of main()).
-  const distIndexStatBefore = await fs.stat(DIST_INDEX);
-
   // cacheDir deliberately points OUTSIDE the repo, in the OS temp dir --
-  // same reasoning as the /practice experiment: this sandbox's bridge
-  // filesystem refuses to delete/rewrite some pre-existing files under
-  // the repo's own node_modules/.vite. A scratch cache dir sidesteps
-  // that without touching anything inside the repo and leaves nothing
-  // behind.
+  // this sandbox's bridge filesystem refuses to delete/rewrite some
+  // pre-existing files under the repo's own node_modules/.vite. A
+  // scratch cache dir sidesteps that without touching anything inside
+  // the repo and leaves nothing behind.
   const cacheDir = await fs.mkdtemp(path.join(os.tmpdir(), "urbanum-prerender-vite-"));
 
   const vite = await createServer({
@@ -86,6 +73,7 @@ async function main() {
   });
 
   const results = [];
+  let homepageResult = null;
 
   try {
     const content = await vite.ssrLoadModule("/src/content/index.js");
@@ -106,10 +94,7 @@ async function main() {
 
     // Same LOAD_TIMEOUT_MS-races-the-real-fetch loaders every component
     // already uses, completely unmodified. Retried a few times only to
-    // survive a cold Node process's first-connection latency -- the
-    // constant itself is never touched. Mirrors the retry that proved
-    // out successfully in the /practice experiment, generalized across
-    // all six loaders main.jsx itself already waits on together.
+    // survive a cold Node process's first-connection latency.
     const MAX_LOAD_ATTEMPTS = 4;
     let anyContentLoaded = false;
     for (let attempt = 1; attempt <= MAX_LOAD_ATTEMPTS; attempt += 1) {
@@ -145,8 +130,7 @@ async function main() {
     // already excludes drafts and already requires slug.current to
     // exist for the "slug" field to be populated; this only adds a
     // defensive filter for the (should-be-impossible) case of a
-    // published Project with no slug at all, so a bad document can
-    // never produce a route rather than being silently skipped.
+    // published Project with no slug at all.
     const projects = getProjects();
     const projectRoutes = projects
       .filter((project) => typeof project?.slug === "string" && project.slug.length > 0)
@@ -168,15 +152,28 @@ async function main() {
     const { default: ProjectTemplate } = await vite.ssrLoadModule(
       PROJECT_TEMPLATE_COMPONENT_PATH,
     );
+    // Same content-layer functions ProjectTemplate.jsx itself calls
+    // (src/projectContent.js) and the same image-resolution/optimization
+    // helpers ImageViewer.jsx/ProjectTemplate.jsx already use
+    // (src/imageOptimization.js) -- reused here purely to compute a
+    // representative OG image for each Project route the exact same way
+    // the app already decides which image to show first. No new
+    // image-selection logic, no new query.
+    const { getProjectBySlug, resolveInitialImageId } = await vite.ssrLoadModule(
+      "/src/projectContent.js",
+    );
+    const { getOptimizedImageSrc } = await vite.ssrLoadModule("/src/imageOptimization.js");
 
     // --- Render + write every FIXED route ---------------------------
     for (const route of FIXED_ROUTES) {
+      const metadata = FIXED_ROUTE_METADATA[route.urlPath];
+      const metaHtml = buildHeadMetadataHtml({ urlPath: route.urlPath, ...metadata });
       // eslint-disable-next-line no-await-in-loop
       const result = await renderRouteToFile({
-        vite,
         urlPath: route.urlPath,
         outFile: route.outFile,
         pristineTemplate,
+        metaHtml,
         loadComponent: async () => {
           const mod = await vite.ssrLoadModule(route.componentPath);
           return React.createElement(mod.default);
@@ -187,23 +184,42 @@ async function main() {
 
     // --- Render + write every discovered Project route ---------------
     for (const route of projectRoutes) {
+      const project = getProjectBySlug(route.slug);
+
+      // Representative image, derived only from real Sanity/Archive Item
+      // data already attached to this Project (project.images), using
+      // the app's own selection order (Featured, then lowest sortOrder
+      // visible) -- never a separate or invented heuristic. Falls back
+      // to the sitewide brand image (handled inside buildHeadMetadataHtml
+      // via DEFAULT_OG_IMAGE_PATH) only when a Project genuinely has no
+      // resolvable image.
+      let representativeImageSrc = null;
+      if (project) {
+        const imageId = resolveInitialImageId(project, null);
+        const item = project.images.find((img) => img.archiveNumber === imageId);
+        if (item?.image) {
+          representativeImageSrc = getOptimizedImageSrc(item.image, 1200);
+        }
+      }
+
+      const metadata = buildProjectMetadata(project, representativeImageSrc);
+      const metaHtml = buildHeadMetadataHtml({ urlPath: route.urlPath, ...metadata });
+
       // eslint-disable-next-line no-await-in-loop
       const result = await renderRouteToFile({
-        vite,
         urlPath: route.urlPath,
         outFile: route.outFile,
         pristineTemplate,
+        metaHtml,
         loadComponent: async () =>
           React.createElement(ProjectTemplate, { slug: route.slug, imageId: null }),
       });
-      results.push({ urlPath: route.urlPath, ...result });
+      results.push({ urlPath: route.urlPath, ...result, ogImage: representativeImageSrc });
     }
 
-    // --- Confirm Archive's dist/index.html was never touched ---------
-    const distIndexStatAfter = await fs.stat(DIST_INDEX);
-    const archiveUntouched =
-      distIndexStatBefore.mtimeMs === distIndexStatAfter.mtimeMs &&
-      distIndexStatBefore.size === distIndexStatAfter.size;
+    // --- Homepage: <head>-only metadata, body untouched, App.jsx never
+    //     imported or rendered -----------------------------------------
+    homepageResult = await writeHomepageMetadata(pristineTemplate);
 
     // --- Summary -------------------------------------------------------
     console.log("\n[prerender] ==================== SUMMARY ====================");
@@ -214,15 +230,18 @@ async function main() {
       );
     }
     console.log(
-      `[prerender] dist/index.html (Archive) untouched: ${archiveUntouched ? "YES" : "NO -- INVESTIGATE"}`,
+      `[prerender] ${homepageResult.ok ? "OK  " : "FAIL"}  / (head-only)              -> dist/index.html` +
+        (homepageResult.ok
+          ? `  (body unchanged: ${homepageResult.bodyUnchanged ? "YES" : "NO -- INVESTIGATE"}, file ${homepageResult.fileBytes} bytes)`
+          : `  ${homepageResult.error}`),
     );
     console.log(
       `[prerender] Project routes discovered from Sanity (not hardcoded): ${projectRoutes.length}`,
     );
     console.log("[prerender] ===================================================\n");
 
-    const anyFailed = results.some((r) => !r.ok);
-    if (anyFailed || !archiveUntouched) {
+    const anyFailed = results.some((r) => !r.ok) || !homepageResult.ok || !homepageResult.bodyUnchanged;
+    if (anyFailed) {
       process.exitCode = 1;
     }
   } finally {
@@ -231,12 +250,12 @@ async function main() {
 }
 
 // Renders one route's component to a string and writes it into a fresh
-// copy of the pristine dist/index.html template. Deliberately does NOT
-// touch <title>, <meta>, or anything else in <head> -- that's out of
-// scope for this phase; every generated file keeps the exact same head
-// Vite's own build produced. Returns a small result record instead of
-// throwing, so one route's failure doesn't abort the whole run.
-async function renderRouteToFile({ urlPath, outFile, pristineTemplate, loadComponent }) {
+// copy of the pristine dist/index.html template, with metaHtml replacing
+// the template's existing <title>...</title> tag. Returns a small result
+// record instead of throwing, so one route's failure doesn't abort the
+// whole run. Refuses outright to ever write to dist/index.html itself --
+// that path is reserved exclusively for writeHomepageMetadata() below.
+async function renderRouteToFile({ urlPath, outFile, pristineTemplate, loadComponent, metaHtml }) {
   try {
     windowShim.location.pathname = urlPath;
 
@@ -244,32 +263,34 @@ async function renderRouteToFile({ urlPath, outFile, pristineTemplate, loadCompo
     const appHtml = renderToString(element);
 
     if (!appHtml || appHtml.trim().length === 0) {
+      return { ok: false, error: "renderToString produced empty output", outFile: null };
+    }
+
+    const titleMatches = pristineTemplate.match(/<title>.*?<\/title>/) ? 1 : 0;
+    if (titleMatches !== 1) {
       return {
         ok: false,
-        error: "renderToString produced empty output",
+        error: "Expected exactly one <title> tag in dist/index.html template",
         outFile: null,
       };
     }
+    let html = pristineTemplate.replace(/<title>.*?<\/title>/, metaHtml);
 
-    const rootMatches = pristineTemplate.match(/<div id="root"><\/div>/g) ?? [];
+    const rootMatches = html.match(/<div id="root"><\/div>/g) ?? [];
     if (rootMatches.length !== 1) {
       return {
         ok: false,
-        error: `Expected exactly one empty <div id="root"></div> in dist/index.html, found ${rootMatches.length}`,
+        error: `Expected exactly one empty <div id="root"></div>, found ${rootMatches.length}`,
         outFile: null,
       };
     }
-
-    const html = pristineTemplate.replace(
-      '<div id="root"></div>',
-      `<div id="root">${appHtml}</div>`,
-    );
+    html = html.replace('<div id="root"></div>', `<div id="root">${appHtml}</div>`);
 
     const outPath = path.join(process.cwd(), "dist", outFile);
     if (path.resolve(outPath) === path.resolve(DIST_INDEX)) {
       // Should be unreachable given the route table, but this is exactly
       // the invariant that must never break: Archive's own dist/index.html
-      // is never a prerender write target.
+      // is written only by writeHomepageMetadata(), never here.
       throw new Error("Refusing to overwrite dist/index.html (Archive's own file).");
     }
 
@@ -284,6 +305,49 @@ async function renderRouteToFile({ urlPath, outFile, pristineTemplate, loadCompo
     };
   } catch (err) {
     return { ok: false, error: err.message, outFile: null };
+  }
+}
+
+// The ONLY function permitted to write dist/index.html. Injects <head>
+// metadata for "/" (see seo/metadata.mjs's FIXED_ROUTE_METADATA["/"])
+// and nothing else -- App.jsx is never imported, never passed to
+// renderToString, and <div id="root"></div> is never touched. Proves
+// that guarantee programmatically (not just by convention) with an
+// explicit <body>-section byte-equality check before writing: if
+// anything about the body differs from the pristine template for any
+// reason, this throws instead of writing.
+async function writeHomepageMetadata(pristineTemplate) {
+  try {
+    const metadata = FIXED_ROUTE_METADATA["/"];
+    const metaHtml = buildHeadMetadataHtml({ urlPath: "/", ...metadata });
+
+    const titleMatches = pristineTemplate.match(/<title>.*?<\/title>/) ? 1 : 0;
+    if (titleMatches !== 1) {
+      return {
+        ok: false,
+        error: "Expected exactly one <title> tag in dist/index.html template",
+      };
+    }
+    const html = pristineTemplate.replace(/<title>.*?<\/title>/, metaHtml);
+
+    const bodyOf = (s) => s.slice(s.indexOf("<body"));
+    const bodyUnchanged = bodyOf(html) === bodyOf(pristineTemplate);
+    if (!bodyUnchanged) {
+      throw new Error(
+        "Homepage metadata injection unexpectedly altered <body> -- refusing to write dist/index.html.",
+      );
+    }
+
+    await fs.writeFile(DIST_INDEX, html, "utf-8");
+
+    return {
+      ok: true,
+      bodyUnchanged,
+      metaHtmlLength: metaHtml.length,
+      fileBytes: Buffer.byteLength(html, "utf-8"),
+    };
+  } catch (err) {
+    return { ok: false, error: err.message };
   }
 }
 

@@ -72,7 +72,11 @@ export const ARCHIVE_ROUTE = Object.freeze({
   bodyPrerendered: false,
   note:
     "Archive's DOM is procedural/randomized and stays entirely client-owned. " +
-    "A later, separate metadata-only phase will inject <head> tags into " +
-    "dist/index.html WITHOUT calling renderToString on App.jsx. This entry " +
-    "is documentation only -- the runner never acts on it.",
+    "PHASE 2: prerender.mjs's writeHomepageMetadata() now injects <head> " +
+    "metadata (see seo/metadata.mjs's FIXED_ROUTE_METADATA['/']) into " +
+    "dist/index.html -- but ONLY <head>, verified by an explicit <body> " +
+    "byte-equality check before the file is written. App.jsx is still " +
+    "never imported or passed to renderToString anywhere in this pipeline. " +
+    "This entry remains documentation of that boundary, not something the " +
+    "runner reads.",
 });
