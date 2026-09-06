@@ -83,6 +83,26 @@ export const FIXED_ROUTE_METADATA = {
       "Notes on architecture and design from Urbānum, a Miami-based architecture practice serving South Florida.",
     ogType: "website",
   },
+  // Phase 3 -- About the Practice (public page name; the route itself
+  // stays "/practice/questions" -- see routes.mjs's own comment on why
+  // the URL and the visible title deliberately don't match). Distinct
+  // from "/practice"'s own description above rather than a near-
+  // duplicate: that one summarizes what Urbānum practices, this one
+  // describes the page itself as a direct-answer format, matching the
+  // final, client-approved 9-question page (services/geography/
+  // residential/preservation/approach) without repeating its wording.
+  // No credentials claim here -- the page itself currently asks no
+  // credentials question, pending verified entity/license wording (see
+  // PracticeQuestionsPage.jsx's own comment). No em dash, no HNW/
+  // internal-targeting language, and no unsupported claim in this
+  // entry's title or description -- the same editorial rule as the
+  // page's own Q&A copy.
+  "/practice/questions": {
+    title: "About the Practice | Urbānum",
+    description:
+      "Answers about Urbānum's architecture practice: services, service areas, residential work, historic preservation, and design approach.",
+    ogType: "website",
+  },
 };
 
 function truncate(text, maxLength) {

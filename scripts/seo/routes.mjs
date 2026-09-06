@@ -51,10 +51,25 @@ export const FIXED_ROUTES = [
     outFile: "journal/index.html",
     componentPath: "/src/JournalPage.jsx",
   },
-  // "/practice/questions" (Practice Questions) is intentionally absent.
-  // Per the current, explicit decision it will be a static editorial
-  // page (no FAQ schema) added later as one more entry here once that
-  // page component exists -- not part of Phase 1.
+  // Phase 3 -- publicly presented as "About the Practice" (its H1 and
+  // <title>, see PracticeQuestionsPage.jsx / seo/metadata.mjs); the URL
+  // stays "/practice/questions" by deliberate decision, not an
+  // oversight -- the two are intentionally allowed to differ. A static
+  // editorial page (no FAQ schema, no CMS content), prerendered exactly
+  // like every other fixed route above via the same generic
+  // FIXED_ROUTES loop in scripts/prerender.mjs -- no change to that
+  // loop's own logic was needed for this. Deliberately NOT part of
+  // Header's primary navigation -- see AboutPage.jsx's own history for
+  // the direct Practice-page link that briefly existed here and was
+  // removed by explicit instruction; this route's only crawlable path
+  // in from the rest of the site is planned for a later, separate
+  // secondary-utility layer (Accessibility/Copyright/Site Information),
+  // not built in this phase.
+  {
+    urlPath: "/practice/questions",
+    outFile: "practice/questions/index.html",
+    componentPath: "/src/PracticeQuestionsPage.jsx",
+  },
 ];
 
 // The component used for every dynamically-discovered Project route.

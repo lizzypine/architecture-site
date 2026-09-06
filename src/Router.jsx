@@ -4,6 +4,7 @@ import AboutPage from "./AboutPage";
 import ContactPage from "./ContactPage";
 import ProjectsPage from "./ProjectsPage";
 import JournalPage from "./JournalPage";
+import PracticeQuestionsPage from "./PracticeQuestionsPage";
 import ProjectTemplate from "./ProjectTemplate";
 import { useCurrentPath } from "./navigation";
 
@@ -100,6 +101,10 @@ export default function Router() {
 
   if (path === "/journal") {
     return <JournalPage />;
+  }
+
+  if (path === "/practice/questions") {
+    return <PracticeQuestionsPage />;
   }
 
   const projectMatch = path.match(PROJECT_ROUTE);
