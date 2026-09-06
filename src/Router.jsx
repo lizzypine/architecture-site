@@ -5,8 +5,9 @@ import ContactPage from "./ContactPage";
 import ProjectsPage from "./ProjectsPage";
 import JournalPage from "./JournalPage";
 import PracticeQuestionsPage from "./PracticeQuestionsPage";
+import SiteInformationPage from "./SiteInformationPage";
 import ProjectTemplate from "./ProjectTemplate";
-import { useCurrentPath } from "./navigation";
+import { navigate, useCurrentPath } from "./navigation";
 
 // Matches "/projects/:slug" and captures the slug -- the one dynamic
 // segment this router needs. Deliberately a plain regex rather than a
@@ -87,38 +88,89 @@ export default function Router() {
     }
   }, [path]);
 
-  if (path === "/practice" || path === "/about") {
-    return <AboutPage />;
+  // Utility Information Phase: the current page, exactly as this
+  // function has always resolved it below -- unchanged branching, just
+  // named so the one new site-wide utility link (see the return
+  // statement below) can be appended as a sibling without duplicating it
+  // inside every branch.
+  function renderPage() {
+    if (path === "/practice" || path === "/about") {
+      return <AboutPage />;
+    }
+
+    if (path === "/contact") {
+      return <ContactPage />;
+    }
+
+    if (path === "/projects") {
+      return <ProjectsPage />;
+    }
+
+    if (path === "/journal") {
+      return <JournalPage />;
+    }
+
+    if (path === "/practice/questions") {
+      return <PracticeQuestionsPage />;
+    }
+
+    if (path === "/site-information") {
+      return <SiteInformationPage />;
+    }
+
+    const projectMatch = path.match(PROJECT_ROUTE);
+    if (projectMatch) {
+      const slug = projectMatch[1];
+      // The clicked Archive Item's id travels as a query param (?image=),
+      // not through Router/navigation.js's path-only state -- read directly
+      // here rather than growing useCurrentPath's contract for one route.
+      // key={slug} gives ProjectTemplate a clean remount whenever the
+      // Project itself changes (Previous/Next Project), rather than trying
+      // to reconcile its internal image-selection state across projects.
+      const imageId = new URLSearchParams(window.location.search).get("image");
+      return <ProjectTemplate key={slug} slug={slug} imageId={imageId} />;
+    }
+
+    return <App />;
   }
 
-  if (path === "/contact") {
-    return <ContactPage />;
-  }
-
-  if (path === "/projects") {
-    return <ProjectsPage />;
-  }
-
-  if (path === "/journal") {
-    return <JournalPage />;
-  }
-
-  if (path === "/practice/questions") {
-    return <PracticeQuestionsPage />;
-  }
-
-  const projectMatch = path.match(PROJECT_ROUTE);
-  if (projectMatch) {
-    const slug = projectMatch[1];
-    // The clicked Archive Item's id travels as a query param (?image=),
-    // not through Router/navigation.js's path-only state -- read directly
-    // here rather than growing useCurrentPath's contract for one route.
-    // key={slug} gives ProjectTemplate a clean remount whenever the
-    // Project itself changes (Previous/Next Project), rather than trying
-    // to reconcile its internal image-selection state across projects.
-    const imageId = new URLSearchParams(window.location.search).get("image");
-    return <ProjectTemplate key={slug} slug={slug} imageId={imageId} />;
-  }
-
-  return <App />;
+  return (
+    <>
+      {renderPage()}
+      {/* Utility Information Phase: one site-wide, minimal, real <a href>
+          to /site-information, bottom-right, fixed (styling in
+          styles.css's own ".site-utility-link" rule). Mounted exactly
+          once, here -- Router is the only point every route already
+          passes through, so this is the smallest way to make the link
+          genuinely persistent without touching Archive/Projects/Contact/
+          Journal/Practice/ProjectTemplate (all under visual lock)
+          individually. Plain preventDefault-then-navigate on an
+          unmodified left click only -- a real href, so it still works
+          with JS disabled and in a prerendered snapshot. Deliberately no
+          beginPageTransition() fade: that's Header's own nav
+          choreography, out of scope for this minimal link per
+          instruction ("no animation beyond existing global link
+          behavior"). */}
+      <a
+        href="/site-information"
+        className="site-utility-link"
+        onClick={(event) => {
+          if (
+            event.defaultPrevented ||
+            event.button !== 0 ||
+            event.metaKey ||
+            event.ctrlKey ||
+            event.shiftKey ||
+            event.altKey
+          ) {
+            return;
+          }
+          event.preventDefault();
+          navigate("/site-information");
+        }}
+      >
+        © Urbānum
+      </a>
+    </>
+  );
 }

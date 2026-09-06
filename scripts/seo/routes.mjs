@@ -70,6 +70,20 @@ export const FIXED_ROUTES = [
     outFile: "practice/questions/index.html",
     componentPath: "/src/PracticeQuestionsPage.jsx",
   },
+  // Utility Information Phase -- the canonical, crawlable /site-information
+  // page (Accessibility + Copyright + the one sanctioned link into
+  // /practice/questions, see SiteInformationPage.jsx's own header
+  // comment). Prerendered exactly like every other fixed route above via
+  // the same generic FIXED_ROUTES loop -- no change to that loop's own
+  // logic was needed for this either. The one site-wide bottom-right
+  // utility link that points here is mounted once in Router.jsx (not a
+  // page component), so it is not itself part of any single fixed
+  // route's own prerendered output -- see that file's own comment on why.
+  {
+    urlPath: "/site-information",
+    outFile: "site-information/index.html",
+    componentPath: "/src/SiteInformationPage.jsx",
+  },
 ];
 
 // The component used for every dynamically-discovered Project route.

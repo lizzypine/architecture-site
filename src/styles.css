@@ -2092,6 +2092,50 @@ body {
   border-right: 0;
 }
 
+/* Utility Information Phase: the one, minimal, site-wide crawlable link
+   to /site-information -- mounted once in Router.jsx (see that file's
+   own comment on why there, not in every page component). Fixed
+   bottom-right using the same clamp() offset convention as
+   .zoom-controls above, plus the same --safe-area-inset-bottom already
+   defined at :root for exactly this kind of fixed bottom UI. Font size
+   is 0.68rem, the smallest already-established readable size in this
+   file (see .about-meta__field dt / .project-archive-index__number)
+   rather than a new one-off value. Deliberately NOT that same uppercase/
+   letter-spaced metadata-label treatment, though -- this is a real link,
+   not a label. Color is only a few shades down from the page's own
+   #faf9f5 background: quieter than this site's existing "muted control"
+   gray (#9d9d9d, e.g. .mobile-search-overlay__option) on purpose, so it
+   reads as closer to background texture than as another UI control,
+   per instruction that it should "visually almost disappear into the
+   composition." No border, no box, no icon, no underline at rest -- a
+   color shift to #111 on hover/focus is the only feedback, the same
+   plain transition (no added animation) this file's other quiet
+   controls already use. No `outline: none` anywhere here, so the
+   browser's own focus ring stays fully intact despite the very low
+   resting contrast. */
+.site-utility-link {
+  position: fixed;
+  right: calc(clamp(14px, 2vw, 20px) + 8px);
+  bottom: calc(clamp(14px, 2vw, 20px) + var(--safe-area-inset-bottom) + 7px);
+  z-index: 500;
+
+  font-family: "GT America", "Helvetica Neue", Helvetica, Arial, sans-serif;
+  font-size: 0.62rem;
+  font-weight: 400;
+  letter-spacing: 0.1em;
+  color: #d8d5c9;
+  text-decoration: none;
+  transition: color 0.25s ease;
+}
+
+.site-utility-link:hover {
+  color: #c9c5b8;
+}
+
+.site-utility-link:focus-visible {
+  color: #111;
+}
+
 /* Scroll-quiet state — header and zoom control settle together
    once the visitor moves away from the start of the archive */
 
@@ -3886,6 +3930,19 @@ html.is-browsing .zoom-controls {
 
 .about-layout__paragraph strong {
   font-weight: 500;
+}
+
+.about-layout__paragraph a {
+  color: inherit;
+  text-decoration: underline;
+  text-decoration-color: rgba(17, 17, 17, 0.35);
+  text-underline-offset: 3px;
+  transition: color 0.25s ease;
+}
+
+.about-layout__paragraph a:hover,
+.about-layout__paragraph a:focus-visible {
+  color: #111;
 }
 
 /* Reuses the same 900px stacking breakpoint .about-columns/.about-layout

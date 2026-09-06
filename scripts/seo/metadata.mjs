@@ -103,6 +103,15 @@ export const FIXED_ROUTE_METADATA = {
       "Answers about Urbānum's architecture practice: services, service areas, residential work, historic preservation, and design approach.",
     ogType: "website",
   },
+  // Utility Information Phase -- Accessibility, Copyright, and a link to
+  // About the Practice. Sparse and factual by design, not a marketing
+  // page.
+  "/site-information": {
+    title: "Site Information | Urbānum",
+    description:
+      "Accessibility, copyright, and additional information about the Urbānum website and architecture practice.",
+    ogType: "website",
+  },
 };
 
 function truncate(text, maxLength) {
