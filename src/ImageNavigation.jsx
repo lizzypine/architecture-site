@@ -45,9 +45,18 @@ export default function ImageNavigation({
   const selectedIndex = images.findIndex(
     (item) => item.archiveNumber === selectedImage.archiveNumber,
   );
-  const previousImage = selectedIndex > 0 ? images[selectedIndex - 1] : null;
-  const nextImage =
-    selectedIndex < images.length - 1 ? images[selectedIndex + 1] : null;
+  // Project Image Carousel -- Loop at Ends pass: previousImage/nextImage
+  // used to be null past either end (guarded below by the buttons' own
+  // `disabled` prop). Modulo-wrapped instead, matching the same
+  // index-normalization ProjectTemplate.jsx's navigateByGestureRef now
+  // uses for wheel/trackpad/swipe/cursor-click -- so these buttons loop
+  // exactly the same way every other navigation input already does,
+  // rather than duplicating a second, differently-shaped bounds check.
+  // images.length is already guaranteed > 1 by the early return above,
+  // so the modulo divisor is never 0.
+  const previousImage =
+    images[(selectedIndex - 1 + images.length) % images.length];
+  const nextImage = images[(selectedIndex + 1) % images.length];
 
   const displayedIndex = images.findIndex(
     (item) => item.archiveNumber === displayedImage.archiveNumber,
@@ -60,11 +69,15 @@ export default function ImageNavigation({
 
   return (
     <div className="project-image-nav" aria-label="Image navigation">
+      {/* Project Image Carousel -- Loop at Ends pass: no longer disabled
+          at either end -- previousImage/nextImage above always resolve
+          to a real image now (modulo-wrapped), so the button is always
+          clickable, consistent with every other navigation input now
+          looping the same way. */}
       <button
         type="button"
         className="project-image-nav__control"
         onClick={() => handleSelect(previousImage)}
-        disabled={!previousImage}
         aria-label="Previous image"
       >
         ‹
@@ -76,7 +89,6 @@ export default function ImageNavigation({
         type="button"
         className="project-image-nav__control"
         onClick={() => handleSelect(nextImage)}
-        disabled={!nextImage}
         aria-label="Next image"
       >
         ›

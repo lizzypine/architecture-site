@@ -2113,6 +2113,29 @@ body {
    controls already use. No `outline: none` anywhere here, so the
    browser's own focus ring stays fully intact despite the very low
    resting contrast. */
+/* Accessibility Implementation Pass: standard visually-hidden utility.
+   Content stays in the document and the accessibility tree (never
+   display: none / visibility: hidden, which would remove it from both)
+   but is clipped to a single pixel and pulled out of visual flow -- the
+   long-established WebAIM/Bootstrap .sr-only technique, not invented
+   here. Used only where a page's approved composition has no legitimate
+   visible title to promote to a real heading (see ProjectsPage.jsx/
+   JournalPage.jsx/ProjectTemplate.jsx), so a real <h1> can exist for
+   assistive tech without perceptibly changing anything sighted visitors
+   see. No existing equivalent class was found in this file before this
+   pass. */
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
 .site-utility-link {
   position: fixed;
   right: calc(clamp(14px, 2vw, 20px) + 8px);
@@ -3943,6 +3966,54 @@ html.is-browsing .zoom-controls {
 .about-layout__paragraph a:hover,
 .about-layout__paragraph a:focus-visible {
   color: #111;
+}
+
+/* Site Information de-emphasis pass: the "About the Practice" copy is no
+   longer its own H2 section (see SiteInformationPage.jsx) -- it's now
+   subordinate fine print below Copyright, so it gets a dedicated,
+   page-scoped class rather than reusing .about-layout__paragraph (which
+   would also change AboutPage.jsx's and PracticeQuestionsPage.jsx's own
+   body copy elsewhere on the site). Deliberately smaller than
+   .about-layout__paragraph's clamp(0.85rem, 1vw, 0.95rem) floor, and in
+   the same quiet gray already established sitewide for secondary/
+   utility text (see .mobile-search-overlay__option and
+   .site-utility-link's own comment on this color) rather than a new
+   one-off value. No margin added -- this paragraph is still a direct
+   child of .about-layout__copy, so it inherits that container's own
+   flex `gap: 0.9em` for spacing, same as every other paragraph on this
+   page. No `outline: none` anywhere here either, so the browser's own
+   focus ring stays fully intact on the link inside it. */
+.site-information__fine-print {
+  /* Fine Print Spacing pass: this paragraph sits inside
+     .about-layout__copy's own flex `gap: 0.9em` (same base gap every
+     other child of that column gets), but that alone read as too close
+     coming right after a full-size body paragraph. This margin-top is
+     the same "new section starting" gap already established by
+     .about-layout__paragraph + .about-layout__heading (the Philosophy
+     break, elsewhere in this same shared system) -- reused rather than
+     inventing a new value, and it stacks on top of the existing flex
+     gap rather than replacing it. Longhand margin-top only, so left/
+     right/bottom stay at 0 and nothing else about this rule changes. */
+  margin-top: clamp(36px, 2.9vw, 48px);
+  margin-right: 0;
+  margin-bottom: 0;
+  margin-left: 0;
+  font-size: 0.72rem;
+  font-weight: 300;
+  line-height: 1.3;
+  color: #9d9d9d;
+  text-align: left;
+}
+
+.site-information__fine-print a {
+  color: inherit;
+  text-decoration: none;
+  transition: color 0.25s ease;
+}
+
+.site-information__fine-print a:hover,
+.site-information__fine-print a:focus-visible {
+  color: #6e6e6e;
 }
 
 /* Reuses the same 900px stacking breakpoint .about-columns/.about-layout
@@ -6052,36 +6123,111 @@ html.is-browsing .zoom-controls {
    text, matching the panel's own original reading width, not a
    full-viewport wall of copy.
 
-   Desktop Project Page visual-matching pass (Josh review): `margin: 0
-   auto` centers this block as a column on the page -- this block
-   previously had no horizontal margin at all, so as an ordinary block box
-   (this element has no flex/grid display of its own established by that
-   fact alone) it simply hugged the LEFT edge of .project-info-panel's
-   full-width box instead of sitting centered, which is what Josh
-   explicitly asked for.
+   Project Info Overlay Desktop pass history: a "Desktop Project Page
+   visual-matching pass" once added `margin: 0 auto` + `text-align:
+   center` (both later removed by a "Restore Prior Approved Layout"
+   pass, using git history as its reference point -- text-align: center
+   on a long description in a narrow column was reading as an unstable
+   vertical stack, so that pass reverted to the pre-centering, left-
+   hugging, un-widened state). That git-history-based restoration was
+   itself then found not to match the client's actual approved desktop
+   mock -- git history was never authoritative for what this rule should
+   be, only for what it USED to be at some prior point.
 
-   `text-align: center` is a second, later addition: Josh confirmed the
-   Info overlay's own visible TEXT, not just this column, should read
-   center-justified -- this cascades to the identity block (title/
-   location/year) and Themes line below, none of which set their own
-   text-align. .project-info-panel__description has its own explicit
-   text-align override (see that rule's own comment) since an explicit
-   value there wins over this inherited one. This is scoped to the
-   Project Info overlay only (.project-info-panel__* classes) -- it does
-   not touch About/Contact's own left-flowing editorial paragraph classes
-   elsewhere on the site, which stay exactly as they were; Josh was
-   explicit that the Project Info overlay's centered text is distinct
-   from those longer editorial layouts. */
+   Project Info Desktop -- Match Client Mock pass (SUPERSEDED for width
+   by the Correction pass below; its other findings still hold): the
+   mock shows one information column that is (a) horizontally CENTERED
+   as a block in the viewport -- hence `margin: 0 auto` -- while its TEXT
+   stays left-aligned (no text-align: center anywhere in this component),
+   and (b) top-aligned within the panel rather than vertically centered
+   -- justify-content changed from center to flex-start, matching the
+   sibling image side's own established convention (.project-viewer uses
+   align-items: flex-start for the same reason), so the title starts at
+   roughly the same height the Project photo itself starts at, using the
+   padding below (unchanged) as the only top gutter. That pass had also
+   set max-width to min(700px, 60%), a value measured directly off a
+   screenshot of the mock -- correct-looking, but tied to nothing else in
+   the codebase, so not reusable design authority.
+
+   Project Info Desktop -- Correction pass (current): the WIDTH is now
+   .about-layout__copy's own already-established editorial-copy measure,
+   clamp(460px, 39vw, 750px) -- the exact "readable text column" value
+   the About page's Practice/Philosophy body copy already uses, reused
+   verbatim rather than re-measured off a mock. It lands within a few
+   pixels of the previous pass's 700px at ordinary desktop viewports, but
+   is now backed by a real, already-vetted site-wide convention instead
+   of a screenshot measurement, and scales continuously with viewport
+   width the same way that convention already does everywhere else it's
+   used. This width is NOT derived from the current Project image's own
+   rendered size: this panel is `position: absolute; inset: 0` against
+   .project-viewer (see that rule's own comment), a sibling overlay to
+   .project-image-column, never nested inside it -- so a narrow/portrait
+   image never shrinks this column. `margin: 0 auto` centers this measure
+   as a block within .project-info-panel's own box, which itself already
+   spans .project-content's full content width (inset: 0 against
+   .project-viewer, which stretches to that same full width via
+   .project-content's default flex `align-items: stretch`, exactly like
+   .project-image-nav-row's own documented "spans .project-content's own
+   full content width" -- so no separate outer max-width was needed here
+   at all, only this inner measure).
+
+   HEIGHT/overflow (new in the Correction pass): .project-info-panel is
+   inset: 0 against .project-viewer, and .project-viewer's own rendered
+   height is already pinned to .project-image-frame's fixed,
+   viewport-derived height formula (see that rule's own comment -- the
+   exact mechanism that keeps .project-image-nav-row's vertical position
+   below constant across every image). This panel's height: 100% above
+   was therefore already capped at exactly the right value -- the space
+   between the content stage's top and the top of the gap before
+   .project-image-nav-row -- with nothing new to invent; the only actual
+   bug was that overflowing text had nowhere to go but to spill past that
+   boundary, since neither this rule nor its parent contained overflow.
+   overflow-y: auto below fixes that the same way the mobile override
+   just beneath this rule already does (identical property/value,
+   already proven correct there) -- long content now scrolls inside this
+   column's own fixed-height box instead of extending past
+   .project-image-nav-row, while .project-viewer's height, this panel's
+   position, and the document's own scroll are all completely
+   unaffected. The mobile-only override below (@media max-width: 900px)
+   is untouched -- it already sets its own justify-content/overflow/
+   width/margin/text-align independently of this base rule and is
+   unaffected by any of this. */
 .project-info-panel__inner {
   height: 100%;
   display: flex;
   flex-direction: column;
-  justify-content: center;
+  justify-content: flex-start;
   gap: 0.5rem;
-  max-width: min(420px, 60%);
+  /* Final Width pass: the previous clamp(460px, 39vw, 750px) (borrowed
+     from .about-layout__copy's own unrelated editorial measure) still
+     read too narrow against the client's approved mock at full desktop
+     width. Replaced with a percentage of THIS element's own real
+     containing block -- .project-info-panel, which (per that rule's own
+     comment) is inset: 0 against .project-viewer and therefore already
+     equals the full width of the actual Project template content region
+     (the same region .project-image-nav-row spans) -- rather than a vw
+     term measured against the raw browser viewport. 78% of that region
+     reads noticeably wider at every desktop width (roughly +50% over
+     the old value at ordinary desktop widths, +20% at very wide ones),
+     stays centered under the header/logo the same way it always was
+     (both .project-content and the header share the same symmetric
+     horizontal padding, so anything centered inside either one via
+     margin: 0 auto is already centered under the other -- nothing
+     needed to change for that), and scales down cleanly on smaller
+     desktop widths since it's a real percentage of the template's own
+     region, not an independent viewport-relative guess. The 920px
+     ceiling keeps line lengths readable on very wide/ultrawide
+     monitors, the one place an unconstrained percentage would otherwise
+     produce an excessively long line -- still well inside
+     .project-content's own bounds at any realistic desktop width. Not
+     derived from the current image's own dimensions at all -- this
+     panel remains a sibling overlay to .project-image-column, never
+     nested inside it (see .project-info-panel's own comment). */
+  max-width: min(920px, 78%);
   padding: clamp(24px, 3vw, 40px);
   margin: 0 auto;
-  text-align: center;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 /* Mobile Project Info overflow fix, corrected: the previous pass added
@@ -6112,9 +6258,17 @@ html.is-browsing .zoom-controls {
    .project-info-panel's own box (unchanged) still stops exactly at
    .project-viewer's bottom edge, above .project-image-nav-row and below
    the top-right mobile back control, so neither is affected by this at
-   all. Desktop's base rule (901px+, justify-content: center) is
-   completely untouched -- this whole block stays scoped to the same
-   ~900px breakpoint this page's other mobile/touch fixes already use.
+   all. This whole block stays scoped to the same ~900px breakpoint this
+   page's other mobile/touch fixes already use, and none of it changed
+   through any of the later desktop-only passes (text-align: center/
+   margin: 0 auto added, then removed as a regression, then margin: 0
+   auto added back while matching the client's approved mock; the
+   desktop base rule's own justify-content also later changed from
+   center to flex-start for that same mock-matching pass -- see
+   .project-info-panel__inner's current comment for all of it). This
+   mobile override's own justify-content: flex-start is simply no longer
+   the only place that value appears, which changes nothing about what
+   this rule does on a phone.
 
    Mobile Info width widening pass: the note directly above ("this
    element's own margin: 0 auto/max-width... are on the opposite axis and
@@ -6145,35 +6299,35 @@ html.is-browsing .zoom-controls {
    (up from 420px) keeps this from staying pinned to a small fixed width
    on a larger touch tablet, for the same reason the 420px floor existed
    in the first place, just rescaled to this pass's own wider intent.
-   text-align: center, the identity block/Themes line's own inherited
-   centering, and every font-size/font-weight/line-height in this
-   component are completely untouched -- only the measure widens.
-   Desktop (901px+, outside this block) keeps the exact min(420px, 60%)
-   value it always had. */
+   Every font-size/font-weight/line-height in this component is
+   completely untouched -- only the measure widens. (Note: this
+   paragraph's references above to the desktop base rule's own
+   max-width/text-align describe what that rule was AT THE TIME this
+   mobile pass was written, not necessarily today -- it has since gone
+   through several more desktop-only revisions (see .project-info-
+   panel__inner's own current comment for the current, authoritative
+   values: max-width: min(700px, 60%), left-aligned text). Nothing in
+   THIS mobile-only block changed through any of those.) Desktop
+   (901px+, outside this block) keeps the exact min(420px, 60%) value it
+   always had. */
 @media (max-width: 900px) {
   /* Mobile fidelity correction (Josh mockup: left-aligned editorial
-     column, not a centered narrow measure): the desktop base rule's own
-     margin: 0 auto + max-width: min(420px, 60%) (widened to min(560px,
-     90%) by the previous mobile pass, directly above) -- and its
-     text-align: center, inherited by title/location/year/themes below
-     and set explicitly again on .project-info-panel__description just
-     beneath this block -- are both a deliberate DESKTOP decision (see
-     this file's own "Desktop Project Page visual-matching pass"
-     comment on the base rule), never previously given a mobile-specific
-     override. Removing the horizontal centering and width cap here
-     lets this element span the full width .project-info-panel already
-     provides (position: absolute; inset: 0 against .project-viewer),
-     with padding (unchanged, clamp(24px, 3vw, 40px) below) supplying
-     the only gutter -- that existing clamp's own floor already
-     resolves to 24px at ordinary phone widths (its 3vw term only
-     exceeds 24px above ~800px), matching the mockup's own ~24-32px
-     gutters without hardcoding a new value. text-align: left then
-     cascades to the identity block (title/location/year) and Themes
-     line, none of which set their own alignment -- only
-     .project-info-panel__description needs its own explicit override,
-     immediately below, since it hardcodes text-align: center itself.
-     Desktop (901px+, outside this block) is completely untouched: same
-     centered column, same center-aligned text, exactly as before. */
+     column, not a centered narrow measure) -- comment updated by the
+     Project Info Overlay Desktop -- Restore Prior Approved Layout pass:
+     at the time this mobile override was written, the desktop base rule
+     hardcoded margin: 0 auto + text-align: center (a deliberate desktop
+     decision back then), so this block's own explicit max-width: none/
+     margin: 0/text-align: left was needed to override that specifically
+     for mobile. That desktop centering has SINCE been removed outright
+     (found to be a regression from the previously-approved desktop
+     layout -- see .project-info-panel__inner's own current comment), so
+     this mobile override is now redundant with desktop's own default in
+     terms of alignment/margin, though max-width: none still matters
+     (desktop still caps at min(420px, 60%); mobile still needs the
+     uncapped width). Left completely unchanged regardless -- nothing
+     about this rule's own behavior needed to change, and it is still
+     exactly correct on its own terms; only the comment's claim about
+     what desktop currently does was stale. */
   .project-info-panel__inner {
     justify-content: flex-start;
     overflow-y: auto;
@@ -6253,53 +6407,181 @@ html.is-browsing .zoom-controls {
    room" its own paragraph-length text needs against the single-line
    Themes row above it.
 
-   Desktop Project Page visual-matching pass (Josh review): Josh has
-   explicitly confirmed the Project Info overlay's own text should read
-   center-justified, so this line's text-align is `center` -- an explicit
-   override of the `text-align: center` this now inherits from
-   .project-info-panel__inner anyway (kept explicit here since every
-   other property on this rule is also explicit, and so a future edit to
-   the parent's alignment can't silently change this line without an
-   explicit signal here too).
+   Desktop Project Page visual-matching pass (Josh review) -- REVERTED by
+   the later Project Info Overlay Desktop -- Restore Prior Approved
+   Layout pass: this rule used to hardcode its own explicit
+   text-align: center here (on top of the same value it inherited from
+   .project-info-panel__inner anyway), added when Josh had confirmed the
+   Project Info overlay's text should read center-justified. That
+   centering -- on both this rule and its parent -- was later found to
+   read as a regression from the previously-approved desktop layout (a
+   long description centered inside this already-narrow measure wraps
+   into short, raggedly-uneven lines rather than an ordinary paragraph),
+   so both the parent's and this rule's own text-align: center were
+   removed; see .project-info-panel__inner's current comment for the
+   full reasoning. This rule is back to inheriting the parent's normal
+   (left) alignment by default, same as before either centering pass.
 
-   History (superseded by the above, kept for context -- "Justified body
-   copy" pass): text-align only -- font size/weight/line-height/color and
-   the panel's own min(420px, 60%) measure (.project-info-panel__inner)
-   were unchanged. The identity block above (title/location/year) and the
-   Themes line right above this one kept their own untouched alignment --
-   each is its own selector, none shared with this one.
+   History (kept for context -- "Justified body copy" pass, predates the
+   centering pass above): font size/weight/line-height/color and the
+   panel's own min(420px, 60%) measure (.project-info-panel__inner) were
+   unchanged by that pass. The identity block above (title/location/
+   year) and the Themes line right above this one kept their own
+   untouched alignment -- each is its own selector, none shared with
+   this one.
    MOBILE NOTE (flagged during that pass's verification, kept as historical
    context): on narrow phone widths, .project-info-panel__inner's own
    min(420px, 60%) measure resolves to roughly 230-240px, narrow enough
    that a short caption can land only one or two words per line -- under
    `text-align: justify` this produced visibly excessive word-spacing on
    those lines (one word stretched most of the way across the line to
-   reach the measure). `text-align: center` doesn't share that specific
-   failure mode (centering a short, ragged line doesn't stretch
-   word-spacing the way justify does), so this note is retained as
-   history rather than as an open issue -- worth a fresh look only if a
-   future alignment change reintroduces justify on narrow widths. */
+   reach the measure). This note is retained as history rather than as an
+   open issue -- worth a fresh look only if a future alignment change
+   reintroduces justify on narrow widths. */
 .project-info-panel__description {
   margin: 0.35rem 0;
   font-size: 0.85rem;
   font-weight: 400;
   line-height: 1.55;
   color: #5a5a5a;
-  text-align: center;
+  /* CMS Formatting correction: richTextType.js deliberately ships no
+     list type (see that file's own comment -- metadata/awards rows are
+     meant to be authored as several short separate Normal blocks, each
+     already rendering as its own <p> via RichText.jsx's block.normal),
+     but Sanity's editor still allows a soft line break (Shift+Enter)
+     WITHIN one block/span, which is plain authoring behavior neither
+     the schema nor RichText.jsx forbids. That soft break survives into
+     this span's own text as a literal "\n" character -- Portable Text
+     doesn't strip it, and RichText.jsx renders span text completely
+     unmodified (see that file's own comment: no custom span/text
+     component is registered) -- so the data was never flattened or
+     concatenated by the render path. The only thing missing was this:
+     default `white-space: normal` collapses a literal "\n" into a
+     plain space, same as any other whitespace, so an authored line
+     break inside one block was invisible once rendered. pre-line keeps
+     that exact default wrapping/space-collapsing behavior for
+     everything else, and additionally renders a literal "\n" as a real
+     line break -- the smallest possible fix, scoped to this one
+     selector (shared by both the RichText path and the legacy plain-
+     string fallback, so it fixes authored breaks in either), touching
+     no other page's paragraph class and no markup/JS anywhere. */
+  white-space: pre-line;
 }
 
-/* Mobile fidelity correction (Josh mockup): this rule's own text-align:
-   center above is an explicit, hardcoded override of the inherited
-   value specifically so a future edit to the parent's alignment can't
-   silently change it (see that rule's own comment) -- which means the
-   mobile-only text-align: left just added to .project-info-panel__inner
-   needs the identical explicit counter-override here, at the same
-   breakpoint, or this one line would stay centered while title/
-   location/year/themes around it turned left-aligned. Font size/
-   weight/line-height/color/margin are completely untouched. */
+/* Mobile fidelity correction (Josh mockup) -- comment updated by the
+   Project Info Overlay Desktop -- Restore Prior Approved Layout pass:
+   this rule used to need an explicit text-align: left here because the
+   base (desktop) rule above hardcoded text-align: center, which an
+   inherited value alone couldn't override cleanly across the
+   breakpoint. That desktop centering has since been removed (see
+   .project-info-panel__inner's own current comment) -- this element and
+   its parent are both back to normal left-aligned text by default on
+   desktop too, so this mobile-only rule is now redundant with the
+   default rather than a required override. Left in place, unchanged, on
+   purpose: it is still completely correct (mobile stays explicitly
+   left-aligned either way), and removing it would be touching a rule
+   this pass was told to leave alone ("do not touch unrelated responsive
+   rules") for a purely cosmetic cleanup with no behavioral upside. Font
+   size/weight/line-height/color/margin are completely untouched. */
 @media (max-width: 900px) {
   .project-info-panel__description {
     text-align: left;
+  }
+}
+
+/* Project Info Desktop -- Precise Client Mock Typography pass: every
+   rule above (.project-info-panel__title/__location/__year/
+   __descriptive/__themes/__description) has been shared, unmodified,
+   between desktop and mobile since this panel was first built -- the
+   mobile block right above only ever overrode layout (width/margin/
+   overflow/alignment), never typography or the divider/themes/year
+   presentation. To correct desktop's visual treatment to match the
+   client's approved mock WITHOUT touching mobile's own approved
+   treatment at all, every change below lives inside this one
+   min-width: 901px block -- the exact complement of this component's
+   existing 900px mobile breakpoint -- rather than editing the base
+   rules above directly. Mobile keeps precisely the values/behavior it
+   already had; nothing here is deleted, only overridden above 900px. */
+@media (min-width: 901px) {
+  /* Title: lighter than the 500 weight above, a small positive tracking
+     value, and an explicit compact line-height, matching the mock's
+     more restrained architectural treatment. Still left-aligned (no
+     text-align set anywhere in this component) and still its own
+     h2 -- only weight/size/tracking/leading change. */
+  .project-info-panel__title {
+    font-size: 0.92rem;
+    font-weight: 400;
+    letter-spacing: 0.02em;
+    line-height: 1.15;
+  }
+
+  /* Location: lighter weight and added tracking so it reads more
+     clearly subordinate to the title above it. letter-spacing reuses
+     the exact 0.04em value .project-info-panel__year below already
+     uses for the same "secondary identity line" role, rather than
+     inventing a new tracking value for a second line in the same
+     block. Color (#6e6e6e, already gray) is untouched. */
+  .project-info-panel__location {
+    font-size: 0.8rem;
+    font-weight: 300;
+    letter-spacing: 0.04em;
+  }
+
+  /* The client mock has no standalone year line in the identity block.
+     Hidden here, desktop only -- project.year and its conditional
+     render in ProjectInfoPanel.jsx are both untouched (display: none
+     removes only the presentation), and mobile keeps showing this line
+     exactly as it already did, since this rule only exists inside this
+     min-width: 901px block. */
+  .project-info-panel__year {
+    display: none;
+  }
+
+  /* The client mock has no hairline rule between the identity block and
+     the description. Border removed, desktop only; margin-top/
+     padding-top (the actual restrained gap this pass's rhythm calls
+     for) are left completely untouched, so the same spacing remains,
+     just without the visible divider line. */
+  .project-info-panel__descriptive {
+    border-top: none;
+  }
+
+  /* The client mock has no "ATMOSPHERE"-style section heading before
+     the description -- image.themes' own uppercase treatment (see that
+     rule's own comment above) is what was reading as one. Hidden here,
+     desktop only; the underlying data and its conditional render are
+     untouched, and mobile keeps showing this line exactly as before. */
+  .project-info-panel__themes {
+    display: none;
+  }
+
+  /* Body copy: noticeably smaller, lighter, and tighter-leaded than the
+     shared base above, matching the mock's compact editorial block --
+     this is why the client's full description now reads as a compact
+     column instead of a tall one. Color (#5a5a5a) and the paragraph
+     margin are untouched; RichText's own paragraph breaks are untouched
+     too (this is a typography-only change to the existing
+     paragraphClassName, not a content change). */
+  .project-info-panel__description {
+    font-size: 0.75rem;
+    font-weight: 300;
+    line-height: 1.4;
+  }
+
+  /* Scrollbar hidden the same way .project-trackpad-scroller/
+     .project-filter-row/body already do sitewide (scrollbar-width: none
+     + -ms-overflow-style: none + a ::-webkit-scrollbar display: none
+     rule) -- reused verbatim, not a new convention. The overflow-y:
+     auto itself (base rule, above) is untouched and still fully
+     functional; only its visible scrollbar chrome is suppressed, desktop
+     only, matching this pass's own scope. */
+  .project-info-panel__inner {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+
+  .project-info-panel__inner::-webkit-scrollbar {
+    display: none;
   }
 }
 

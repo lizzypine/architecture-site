@@ -194,9 +194,38 @@ export function getArchiveOptimizedImageSrcSet(src, extension) {
   // keeps requesting exactly optimizedImageWidths, exactly as before this
   // pass.
   if (isLocalImageAsset(src)) {
-    return optimizedImageWidths
-      .map((width) => `${getArchiveOptimizedImageSrc(src, width, extension)} ${width}w`)
-      .join(", ");
+    const candidates = optimizedImageWidths.map(
+      (width) => `${getArchiveOptimizedImageSrc(src, width, extension)} ${width}w`,
+    );
+
+    // Archive zoom image-quality pass (launch blocker, Josh review): a
+    // local archive image's `src` argument here IS already the real,
+    // untouched full-resolution original file path (e.g.
+    // /img/pexels-....jpg -- see isLocalImageAsset above; nothing
+    // upstream ever rewrites it), at its true intrinsic width per
+    // image-metadata.json (getImageDimensions, defined further down this
+    // same file). Appending it as a fourth, larger srcset candidate is
+    // purely additive: a browser only ever fetches the smallest
+    // candidate that satisfies its current `sizes` value, so this has no
+    // effect on what loads at the existing, unchanged initial `sizes`
+    // (getGalleryImageSizes in App.jsx) -- it only becomes reachable once
+    // App.jsx's zoom-driven `sizes` promotion effect raises `sizes` past
+    // 1200px for a tile the visitor has actually zoomed in on. No
+    // original .webp exists for these assets (only the optimizer's own
+    // 400/800/1200 webp tiers) -- scripts/optimize-archive-images.mjs is
+    // untouched by this pass, and this branch does not fabricate a webp
+    // that was never generated -- so this only extends the jpg
+    // candidate list; the webp <source> stays capped at 1200w exactly as
+    // before.
+    if (extension === "jpg") {
+      const fullWidth = getImageDimensions(src).width;
+      const largestTierWidth = optimizedImageWidths[optimizedImageWidths.length - 1];
+      if (fullWidth > largestTierWidth) {
+        candidates.push(`${src} ${fullWidth}w`);
+      }
+    }
+
+    return candidates.join(", ");
   }
 
   // Sanity branch (Archive quality fix, same shape as the Project-page

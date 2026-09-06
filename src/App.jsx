@@ -399,7 +399,21 @@ const CAMERA_ZOOM_WHEEL_STEP_MAX = 0.12;
 // jump now glides smoothly instead of stepping). Mobile pinch does NOT
 // use this ease -- see its own call site's comment for why it stays on
 // the instant, per-frame-exact path it already had.
-const CAMERA_ZOOM_EASE = 0.22;
+// Desktop Archive Zoom Polish pass: nudged from 0.22 -> 0.3. The
+// cursor-anchor correction in applyZoomAnchor is an exact algebraic
+// solve re-applied every single frame the scale actually changes -- not
+// an approximation -- so this is not fixing a wrong formula. What it
+// does fix is duration: at 0.22 the displayed scale visibly trails
+// targetScaleRef for several more frames after a wheel/trackpad zoom
+// input, and for as long as that catch-up is happening the anchored
+// point is still visibly sliding into its final position rather than
+// reading as locked under the cursor -- the same lag also reads as
+// "heavier"/slower overall. 0.3 still glides (not an instant snap -- see
+// this constant's own original comment on why snapping was rejected)
+// but settles in noticeably fewer frames, so the anchor reads as
+// grabbing hold of the cursor's point sooner. Zoom min/max, direction,
+// and the anchor formula itself are all completely untouched.
+const CAMERA_ZOOM_EASE = 0.3;
 
 // Matches the snap-to-target epsilon convention already used for
 // viewportDrawerScaleRef above (0.0005) -- once within this distance of
@@ -653,8 +667,11 @@ const CAMERA_PAN_WHEEL_FRICTION = 0.95;
 // pass.
 //
 // Value: 0.13. Matched against this file's two other ease-toward-target
-// rates -- CAMERA_ZOOM_EASE (0.22, ~4.1-frame time constant, ~68ms to 63%
-// caught-up) reads as quick/responsive by design, since zoom is a discrete
+// rates -- CAMERA_ZOOM_EASE (0.22 at the time this comparison was written,
+// since retuned to 0.3 by the Desktop Archive Zoom Polish pass -- see
+// that constant's own current comment; the comparison's conclusion is
+// unaffected, since 0.3 reads as even MORE quick/responsive, not less)
+// reads as quick/responsive by design, since zoom is a discrete
 // per-notch action the user expects to track promptly. Pan needed to read
 // as heavier/more resistant than that, not merely different, so 0.13
 // (~7.2-frame time constant, ~120ms to 63%, ~360ms to ~95% caught-up) sits
@@ -982,6 +999,16 @@ function getGuaranteedWorldReach() {
 // getArchiveOptimizedImageSrcSet, still capped at the Sanity source's own
 // intrinsic width, still 400/800/1200 only for local assets).
 const ARCHIVE_DISCOVERY_TILE_SIZES_HEADROOM = 1.75;
+
+// Archive zoom image-quality pass (launch blocker, Josh review): how
+// often the zoom-driven `sizes` promotion effect further down re-checks
+// currently-rendered tiles against the camera's live scale
+// (viewportScaleRef). Deliberately independent of the camera's own
+// 60fps RAF loop -- a `sizes` promotion is a rare, one-way event per
+// tile (see promotedImageSizesRef's own comment), not something that
+// benefits from per-frame precision, so this is a coarse, cheap poll
+// rather than a hook into camera math/the motion loop.
+const ARCHIVE_ZOOM_QUALITY_POLL_MS = 300;
 
 function getGalleryImageSizes(layout) {
   const width = Math.ceil(Number.parseFloat(layout.width));
@@ -3331,15 +3358,18 @@ function App() {
     // the same friction constant, completely independent of the wheel
     // fields above so finger-drag latency is untouched by this pass.
     touchVelocity: 0,
-    // Archive touch-camera upgrade (vertical pan): the Y counterpart to
-    // distance/touchVelocity immediately above -- same shape, same
-    // scale-invariant treatment, same friction, deliberately with no
-    // wheel/desktop counterpart at all (see addTouchPanVelocityY's own
-    // comment for why wheel must never write here). distanceY is the
-    // world-space vertical free-pan position (bounded every frame in
-    // animateGallery from the real generated-geometry overflow, see that
-    // block's own comment); touchVelocityY is its single-stage
-    // direct-injection accumulator, mirroring touchVelocity exactly.
+    // Archive touch-camera upgrade (vertical pan) + Desktop Archive Zoom
+    // Polish pass: the Y counterpart to distance/touchVelocity immediately
+    // above -- same shape, same scale-invariant treatment, same friction.
+    // Originally touch-only; desktop wheel/trackpad input now also writes
+    // here via addWheelPanVelocityY (see its own comment, next to
+    // addTouchPanVelocityY, for why sharing this one field -- rather than
+    // giving wheel a separate, parallel Y field -- is the right call).
+    // distanceY is the world-space vertical free-pan position (bounded
+    // every frame in animateGallery from the real generated-geometry
+    // overflow, see that block's own comment); touchVelocityY is its
+    // single-stage direct-injection accumulator, mirroring touchVelocity
+    // exactly, for either input source.
     distanceY: 0,
     touchVelocityY: 0,
     hasBrowsed: false,
@@ -3400,6 +3430,18 @@ function App() {
   // file already uses for renderWindowRef/openingGeometryRef relative
   // to their own state counterparts.
   const renderedGalleryItemsRef = useRef([]);
+  // Archive zoom image-quality pass: DOM handles for each currently-
+  // mounted gallery tile's <picture> element (keyed by item.id, written
+  // by the ref callback on <picture> in the JSX below), and, separately,
+  // the largest `sizes` value already promoted to for that tile this
+  // session -- a per-item high-water-mark the polling effect below only
+  // ever raises, never lowers, so a tile can't be downgraded/reloaded
+  // smaller once genuinely zoomed. Both are plain refs, not state: this
+  // pass deliberately avoids adding any new React state/re-render tied
+  // to the camera's continuous scale, the same reasoning
+  // renderedGalleryItemsRef/viewportScaleRef above already follow.
+  const galleryPictureElsRef = useRef(new Map());
+  const promotedImageSizesRef = useRef(new Map());
   // Mirrors the isScrolling state (declared further down, with its own
   // comment) for the animateGallery loop's own use: that loop runs every
   // frame and is not recreated when isScrolling changes (its effect only
@@ -5238,6 +5280,27 @@ function App() {
 
       if (focusedIdRef.current !== null && scrollKeys.has(event.key)) {
         event.preventDefault();
+        return;
+      }
+
+      // Homepage Space-bar fix: outside the image-focused/zoomed mode
+      // above, nothing else on this page relies on native document
+      // scroll -- the Archive's own pan/zoom is a separate, transform-
+      // driven camera -- but html/body still have real overflow-y: auto
+      // (see styles.css), so pressing Space while nothing meaningful has
+      // focus triggers the browser's native "page down" scroll, visually
+      // desyncing the fixed Header from the Archive underneath even
+      // though the camera itself never moves. Scoped to Space only, and
+      // only to document.activeElement genuinely being body/the document
+      // root (Safari can report either depending on state) -- a focused
+      // button/link/input keeps its own native Space behavior untouched.
+      if (
+        event.key === " " &&
+        (document.activeElement === document.body ||
+          document.activeElement === document.documentElement ||
+          document.activeElement === null)
+      ) {
+        event.preventDefault();
       }
     };
 
@@ -5904,12 +5967,21 @@ function App() {
       // frame's math; the two channels above are the actual state.
       movement.velocity = currentVelocity;
 
-      // Archive touch-camera upgrade (vertical pan): the Y counterpart to
-      // the X block above -- same canMove gate, same scale-invariant
-      // division, same friction, deliberately summing NOTHING from wheel
-      // (movement.touchVelocityY has no wheel/desktop writer anywhere in
-      // this file -- see addTouchPanVelocityY's own comment), so desktop
-      // wheel/trackpad input can never move this channel.
+      // Archive touch-camera upgrade (vertical pan) + Desktop Archive Zoom
+      // Polish pass: the Y counterpart to the X block above -- same
+      // canMove gate, same scale-invariant division, same friction.
+      // movement.touchVelocityY is no longer touch-exclusive despite its
+      // name (kept unrenamed to avoid a disruptive rename across every
+      // existing call site/comment that already references it) -- desktop
+      // wheel/trackpad input now also writes into this SAME channel, via
+      // addWheelPanVelocityY (see its own comment, next to
+      // addTouchPanVelocityY below, for why sharing one channel rather
+      // than duplicating a parallel wheel-only field is the right call
+      // here). Both sources land in the identical downstream gate below
+      // (freePanYActivation, derived from CAMERA_FREE_PAN_Y_ACTIVATION_
+      // SCALE/FULL_SCALE), so desktop now respects the exact same
+      // approved zoom-level thresholds mobile already does, with no new
+      // gating logic of any kind.
       const currentVelocityY = canMove ? movement.touchVelocityY : 0;
       const worldDeltaY =
         effectiveScale > 0
@@ -6059,6 +6131,35 @@ function App() {
       );
     };
 
+    // Desktop Archive Zoom Polish pass: the wheel/trackpad counterpart to
+    // addTouchPanVelocityY immediately above -- writes into the SAME
+    // movement.touchVelocityY channel (not a separate wheel-only field)
+    // deliberately: unlike X (which has a real, tuned "Weighted Dial Pan
+    // Feel" two-stage model -- wheelVelocity easing into
+    // appliedWheelVelocity -- because the horizontal browse mechanic is
+    // this Archive's primary interaction), Y-pan on mobile has always
+    // used this same plain single-stage decay, and the goal here is
+    // specifically to give desktop the SAME feel mobile already has, not
+    // a second, differently-tuned vertical mechanic. Sharing the channel
+    // is what guarantees that: identical friction, identical bounds
+    // (maxFreePanWorldY below), identical hard-stop-at-edge behavior,
+    // for whichever input produced the velocity. Deliberately does NOT
+    // touch movement.direction, same as addTouchPanVelocityY -- that
+    // field is X-axis-only semantics (Relationship Engine placement) and
+    // must stay governed exclusively by horizontal velocity.
+    const addWheelPanVelocityY = (
+      delta,
+      cap = CAMERA_PAN_TOUCH_VELOCITY_CAP,
+    ) => {
+      if (!movement.enabled || focusedIdRef.current !== null) return;
+
+      movement.touchVelocityY = clamp(
+        movement.touchVelocityY + delta,
+        -cap,
+        cap,
+      );
+    };
+
     const handleWheel = (event) => {
       // Project Filter Composition: while the archive is showing
       // ProjectFilterRow instead of the normal composition, this global
@@ -6141,6 +6242,25 @@ function App() {
       addWheelPanVelocity(
         softenWheelPanDelta(deltaY + deltaX) * CAMERA_PAN_WHEEL_IMPULSE_COEFF,
         CAMERA_PAN_WHEEL_VELOCITY_CAP,
+      );
+      // Desktop Archive Zoom Polish pass: deltaY ALSO drives a second,
+      // independent vertical contribution -- deliberately not removed
+      // from the horizontal line above, since that combined deltaY+deltaX
+      // horizontal-pan behavior is the existing, approved default-scale
+      // interaction (critically, what lets a plain vertical mouse wheel,
+      // which only ever reports deltaY and never deltaX, still pan the
+      // Archive horizontally -- removing it would break that). deltaX is
+      // deliberately excluded here: it is already a purely horizontal
+      // input signal, same as mobile's own per-axis split (deltaX -> X,
+      // deltaY -> Y, never combined) via addTouchPanVelocity/
+      // addTouchPanVelocityY. At the default/overview scale this is a
+      // no-op in practice: maxFreePanWorldY (see updateGalleryMotion)
+      // evaluates to 0 below CAMERA_FREE_PAN_Y_ACTIVATION_SCALE, so
+      // movement.distanceY stays clamped to exactly 0 regardless of any
+      // accumulated velocity here -- vertical pan only ever becomes
+      // visible once genuinely zoomed past that same approved threshold.
+      addWheelPanVelocityY(
+        -deltaY * CAMERA_PAN_WHEEL_IMPULSE_COEFF,
       );
     };
 
@@ -6579,6 +6699,76 @@ function App() {
   // was already intended by "recomputed when the render window moves."
   // Same inputs, same output, same isItemInRenderWindow logic -- just no
   // longer redone on unrelated re-renders.
+  // Archive zoom image-quality pass (launch blocker, Josh review): a
+  // tile's `sizes` (getGalleryImageSizes above) describes only its
+  // static, un-transformed CSS layout box -- the browser's native
+  // srcset/sizes algorithm has no way to know the Archive camera later
+  // renders that same box larger via `transform: scale(...)` (see
+  // createGalleryRenderer's applyTransform/viewportScaleRef above), so a
+  // zoomed-in tile keeps showing whatever candidate it fetched for its
+  // neutral footprint, reading as blurry once genuinely magnified. This
+  // effect does not touch the camera itself -- no camera math, zoom
+  // limits/behavior, pan, or RAF-loop changes -- it only READS the
+  // already-existing viewportScaleRef.current, the same live eased scale
+  // the camera loop itself writes every frame. It does not touch
+  // virtualization either: it only ever inspects
+  // renderedGalleryItemsRef.current, the existing, already-virtualized
+  // set the render loop maintains for its own purposes (see that ref's
+  // own comment above) -- an item outside that set is left alone.
+  //
+  // On a coarse interval (ARCHIVE_ZOOM_QUALITY_POLL_MS -- independent of
+  // the camera's own 60fps loop), for each currently-rendered tile this
+  // computes the physical pixel width the camera's current scale plus
+  // devicePixelRatio actually demand, and -- only if that exceeds the
+  // largest `sizes` already promoted to for that tile this session
+  // (promotedImageSizesRef, a high-water-mark that only ever grows) --
+  // imperatively raises the `sizes` attribute on that tile's two
+  // <picture><source> elements (galleryPictureElsRef, populated by the
+  // ref callback on <picture> in the JSX below). Raising `sizes` is the
+  // entire mechanism: it fetches nothing itself, it only tells the
+  // browser's own native responsive-image algorithm that a larger box is
+  // now in play. That algorithm's existing candidate list
+  // (getArchiveOptimizedImageSrcSet, unchanged -- already 400/800/1200,
+  // plus, for local assets, the true full-resolution original above
+  // 1200px, see that function's own comment in imageOptimization.js)
+  // does the rest: fetches the smallest still-sufficient candidate,
+  // lets the browser cache it natively, and never re-fetches a smaller
+  // one afterward -- exactly the "promote to the next existing tier,
+  // never downgrade, rely on the browser cache" behavior this pass asks
+  // for, with no manual fetching or caching code of any kind.
+  //
+  // A tile's INITIAL `sizes` (and therefore initial fetch/quality) is
+  // completely unaffected: this effect only ever raises `sizes` above
+  // its starting value, in response to genuine zoom, strictly after
+  // mount -- never on first paint, and never for a tile outside the
+  // current render window.
+  useEffect(() => {
+    const intervalId = window.setInterval(() => {
+      const scale = viewportScaleRef.current || 1;
+      const dpr = window.devicePixelRatio || 1;
+
+      for (const item of renderedGalleryItemsRef.current) {
+        const pictureEl = galleryPictureElsRef.current.get(item.id);
+        if (!pictureEl) continue;
+
+        const baseWidth = Number.parseFloat(getGalleryImageSizes(item.layout));
+        const neededWidth = Math.ceil(baseWidth * scale * dpr);
+        const currentPromoted =
+          promotedImageSizesRef.current.get(item.id) || baseWidth;
+
+        if (neededWidth > currentPromoted) {
+          const sizesValue = `${neededWidth}px`;
+          pictureEl.querySelectorAll("source").forEach((sourceEl) => {
+            sourceEl.sizes = sizesValue;
+          });
+          promotedImageSizesRef.current.set(item.id, neededWidth);
+        }
+      }
+    }, ARCHIVE_ZOOM_QUALITY_POLL_MS);
+
+    return () => window.clearInterval(intervalId);
+  }, []);
+
   const renderedGalleryItems = useMemo(
     () =>
       focusedId === null
@@ -6968,7 +7158,18 @@ function App() {
                     "--relationship-recede-delay": `${relationshipRecedeDelayMs}ms`,
                   }}
                 >
-                  <picture>
+                  <picture
+                    ref={(el) => {
+                      // Archive zoom image-quality pass: registers this
+                      // tile's <picture> so the polling effect above can
+                      // later raise its <source>s' `sizes` in response to
+                      // camera zoom -- see that effect's own comment.
+                      // Purely a lookup handle; does not affect layout,
+                      // paint, or any existing behavior on its own.
+                      if (el) galleryPictureElsRef.current.set(item.id, el);
+                      else galleryPictureElsRef.current.delete(item.id);
+                    }}
+                  >
                     <source
                       type="image/webp"
                       srcSet={getArchiveOptimizedImageSrcSet(item.src, "webp")}

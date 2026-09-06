@@ -735,10 +735,11 @@ export default function ProjectTemplate({ slug, imageId }) {
           onFilterOpenChange={setIsIndexDrawerOpen}
           onDrawerHeightChange={setIndexDrawerHeight}
         />
-        <div className="about-content">
+        <main className="about-content">
+          <h1 className="visually-hidden">Project not found</h1>
           <ProjectBreadcrumb />
           <p className="project-not-found">Project not found.</p>
-        </div>
+        </main>
       </div>
     );
   }
@@ -776,15 +777,38 @@ export default function ProjectTemplate({ slug, imageId }) {
     navigate(`/projects/${project.slug}?image=${archiveNumber}`);
   };
 
+  // Project Image Carousel -- Loop at Ends pass: this is the single
+  // shared navigation path every gesture already funnels through (wheel/
+  // trackpad-swipe, touch-swipe, trackpad-settle, and click-to-navigate
+  // via the directional cursor -- see this file's own "Image swipe/
+  // trackpad navigation" comment above and the click-to-navigate comment
+  // near the cursor logic), so wrapping it here is the one change that
+  // covers all of them with nothing duplicated. Previously: `target` was
+  // simply project.images[index +/- 1], which is undefined past either
+  // end, and the very next line's `if (!target) return` silently no-opped
+  // -- correct "stop at the ends" behavior for a non-looping carousel, but
+  // it meant the directional cursor (which always shows a prev/next
+  // chevron based purely on cursor position, never on whether a target
+  // exists -- see getDirectionForClientX above, intentionally untouched)
+  // could show a chevron that did nothing at the first/last image. Simple
+  // modulo index normalization removes that dead-end entirely: `next`
+  // past the last image wraps to index 0, `prev` before the first wraps
+  // to the last index, so a target always exists and handleSelectImage
+  // always fires -- no more `if (!target) return`. Nothing else about
+  // this function changed: same findIndex lookup, same handleSelectImage
+  // call (which is itself untouched -- fade timing/overlap lives entirely
+  // in ImageViewer.jsx's own crossfade state machine, never referenced
+  // here).
   navigateByGestureRef.current = (direction) => {
+    const total = project.images.length;
+    if (total === 0) return;
     const index = project.images.findIndex(
       (item) => item.archiveNumber === currentImage.archiveNumber,
     );
     if (index === -1) return;
-    const target =
-      direction === "next" ? project.images[index + 1] : project.images[index - 1];
-    if (!target) return;
-    handleSelectImage(target.archiveNumber);
+    const targetIndex =
+      direction === "next" ? (index + 1) % total : (index - 1 + total) % total;
+    handleSelectImage(project.images[targetIndex].archiveNumber);
   };
 
   // Wired to ImageViewer's onImageLoaded -- fires once the currently
@@ -817,7 +841,7 @@ export default function ProjectTemplate({ slug, imageId }) {
         onDrawerHeightChange={setIndexDrawerHeight}
       />
 
-      <div
+      <main
         className={`about-content project-content${
           isIndexDrawerOpen ? " scroll-container--drawer-open" : ""
         }`}
@@ -839,6 +863,15 @@ export default function ProjectTemplate({ slug, imageId }) {
             : undefined,
         }}
       >
+        {/* Accessibility Implementation Pass: ProjectHeader.jsx (which
+            used to render this page's own visible <h1>) was retired from
+            this template a while back (see this file's own top comment)
+            and nothing replaced it, so individual Project pages had no
+            real page-level heading at all. Real Project data already in
+            scope here (project.title) -- not fabricated -- rendered
+            visually-hidden so it doesn't perceptibly change the approved
+            image-first composition. */}
+        <h1 className="visually-hidden">{project.title}</h1>
         <ProjectBreadcrumb
           isInfoOpen={isInfoOpen}
           onToggleInfo={handleToggleInfo}
@@ -963,7 +996,7 @@ export default function ProjectTemplate({ slug, imageId }) {
           </p>
         )}
 
-      </div>
+      </main>
     </div>
   );
 }
