@@ -24,6 +24,14 @@
 // See this phase's report for the full list of what was deliberately
 // left out and why.
 
+// JSON-LD Structured Data Foundation pass: PROJECT_ROUTE_OUT_SUBDIR is
+// the one existing source of truth for a Project route's URL shape
+// (see scripts/seo/routes.mjs's own comment) -- reused here so a
+// Project's JSON-LD @id/url is derived from the same constant
+// prerender.mjs already uses to decide where that route's file is
+// written, rather than re-hardcoding "/projects/" a second time.
+import { PROJECT_ROUTE_OUT_SUBDIR } from "./routes.mjs";
+
 export const SITE_ORIGIN = "https://urbanumarchitecture.org";
 export const SITE_NAME = "Urbānum";
 
@@ -171,11 +179,21 @@ function buildProjectDescription(project) {
 export function buildProjectMetadata(project, representativeImageSrc) {
   const title = project?.title ? `${project.title} — ${SITE_NAME}` : `Project — ${SITE_NAME}`;
 
+  // Same absolute-URL treatment buildHeadMetadataHtml gives ogImagePath,
+  // computed here too because the JSON-LD `image` field is a structured-
+  // data property in its own right, not something read back out of the
+  // og:image tag -- and, unlike ogImagePath below, it is never defaulted
+  // to the sitewide brand logo when a Project has no resolvable image of
+  // its own: DEFAULT_OG_IMAGE_PATH is a fallback for the Open Graph
+  // preview concern only, not a real fact about this specific Project.
+  const absoluteImage = representativeImageSrc ? toAbsoluteUrl(representativeImageSrc) : null;
+
   return {
     title,
     description: buildProjectDescription(project),
     ogType: "article",
     ogImagePath: representativeImageSrc || undefined,
+    projectJsonLd: buildProjectJsonLdNode(project, absoluteImage),
   };
 }
 
@@ -187,6 +205,129 @@ function escapeHtml(value) {
     .replace(/"/g, "&quot;");
 }
 
+// -----------------------------------------------------------------------
+// SEO PHASE -- Structured Data Foundation. Minimal JSON-LD, built ONLY
+// from facts already established for this practice (see this pass's own
+// report for the exact source of each field) -- no NCARB, no invented
+// service claims, no geo/service-area invention beyond "Florida-based,"
+// no ratings/reviews, no founding date, no social URLs (none confirmed
+// to exist), no FAQ schema, and no address/phone -- neither is used
+// verbatim as a static string anywhere in this codebase (the Contact
+// page's address/phone live only in Sanity CMS content, in a different
+// format than specified, with no confirmed-live production source to
+// check them against), so both are left out entirely rather than
+// guessed at.
+//
+// Stable @id values below let WebSite/Organization/Person reference each
+// other instead of duplicating disconnected objects -- the same
+// "reference, don't repeat" graph convention JSON-LD is designed for.
+// -----------------------------------------------------------------------
+const WEBSITE_ID = `${SITE_ORIGIN}/#website`;
+const ORGANIZATION_ID = `${SITE_ORIGIN}/#organization`;
+const PRINCIPAL_ID = `${SITE_ORIGIN}/#principal`;
+
+const ORGANIZATION_LEGAL_NAME = "URBANUM LLC";
+const PRINCIPAL_NAME = "Joshua Sperduti-Figueroa";
+const PRINCIPAL_DESIGNATION = "AIA";
+const ORGANIZATION_DESCRIPTION = "Florida-based architecture practice";
+
+// Sitewide entity graph -- present on every prerendered route (via
+// buildHeadMetadataHtml below), not just the homepage, so the same
+// stable @id set is available no matter which page a crawler lands on
+// first. Organization is used rather than a LocalBusiness-family type
+// (ProfessionalService/Architect/etc.) because those conventionally
+// expect address/geo fields to be well-formed, and no address is
+// included in this pass -- see the comment above.
+function buildSiteJsonLdGraph() {
+  return [
+    {
+      "@type": "WebSite",
+      "@id": WEBSITE_ID,
+      url: SITE_ORIGIN,
+      name: SITE_NAME,
+      publisher: { "@id": ORGANIZATION_ID },
+    },
+    {
+      "@type": "Organization",
+      "@id": ORGANIZATION_ID,
+      name: SITE_NAME,
+      legalName: ORGANIZATION_LEGAL_NAME,
+      url: SITE_ORIGIN,
+      description: ORGANIZATION_DESCRIPTION,
+      founder: { "@id": PRINCIPAL_ID },
+    },
+    {
+      "@type": "Person",
+      "@id": PRINCIPAL_ID,
+      name: PRINCIPAL_NAME,
+      honorificSuffix: PRINCIPAL_DESIGNATION,
+      jobTitle: "Principal Architect",
+      worksFor: { "@id": ORGANIZATION_ID },
+    },
+  ];
+}
+
+// Project JSON-LD -- completely data-driven, exactly like
+// buildProjectDescription() above: every field is read from the real
+// object getProjectBySlug() returns, and a missing field is simply
+// omitted from the node rather than defaulted or invented. Returns null
+// when there's no project at all (an unresolved slug) or no slug to
+// build a stable @id/url from, so callers can drop it from the graph
+// entirely rather than emitting a placeholder node.
+function buildProjectJsonLdNode(project, absoluteImage) {
+  if (!project || !project.slug) return null;
+
+  const url = `${SITE_ORIGIN}/${PROJECT_ROUTE_OUT_SUBDIR}/${project.slug}`;
+  const node = {
+    "@type": "CreativeWork",
+    "@id": `${url}#project`,
+    url,
+    isPartOf: { "@id": WEBSITE_ID },
+    creator: { "@id": ORGANIZATION_ID },
+  };
+
+  if (typeof project.title === "string" && project.title.trim()) {
+    node.name = project.title.trim();
+  }
+
+  const description =
+    typeof project.description === "string" ? project.description.trim() : "";
+  if (description) {
+    node.description = description;
+  }
+
+  if (typeof project.location === "string" && project.location.trim()) {
+    node.contentLocation = { "@type": "Place", name: project.location.trim() };
+  }
+
+  if (project.year) {
+    node.dateCreated = String(project.year);
+  }
+
+  if (Array.isArray(project.types) && project.types.filter(Boolean).length > 0) {
+    node.keywords = project.types.filter(Boolean).join(", ");
+  }
+
+  if (absoluteImage) {
+    node.image = absoluteImage;
+  }
+
+  return node;
+}
+
+// Serializes the graph as one <script type="application/ld+json">
+// element. "<" is escaped to "\u003c" (valid inside a JSON string,
+// invisible to any JSON.parse) so a value that happened to contain
+// "</script>" could never prematurely close the tag -- standard
+// practice for embedding JSON inside HTML, not specific to any value
+// currently in this graph.
+function buildJsonLdScriptTag(nodes) {
+  const graph = { "@context": "https://schema.org", "@graph": nodes };
+  const json = JSON.stringify(graph).replace(/</g, "\\u003c");
+  return `<script type="application/ld+json">${json}</script>`;
+}
+
+
 // The one function that ever writes tag markup, used identically for
 // fixed routes, dynamic Project routes, and the head-only homepage case
 // -- so the tag SET itself never has to be kept in sync across call
@@ -195,7 +336,7 @@ function escapeHtml(value) {
 // whole block in one string substitution) followed by meta description,
 // canonical link, Open Graph, and Twitter Card tags. No JSON-LD, no
 // FAQ/sitemap/robots markup -- out of scope for this phase.
-export function buildHeadMetadataHtml({ urlPath, title, description, ogType, ogImagePath }) {
+export function buildHeadMetadataHtml({ urlPath, title, description, ogType, ogImagePath, projectJsonLd }) {
   const canonical = canonicalFor(urlPath);
   const absoluteImage = toAbsoluteUrl(ogImagePath ?? DEFAULT_OG_IMAGE_PATH);
 
@@ -223,6 +364,21 @@ export function buildHeadMetadataHtml({ urlPath, title, description, ogType, ogI
   if (absoluteImage) {
     lines.push(`<meta name="twitter:image" content="${absoluteImage}" />`);
   }
+
+  // Structured Data Foundation: one script tag per route, carrying the
+  // sitewide WebSite/Organization/Person graph plus (Project routes
+  // only) this route's own data-driven Project node -- see
+  // buildSiteJsonLdGraph()/buildProjectJsonLdNode() above. Placed inside
+  // this same function, and inside the SAME marker-wrapped block
+  // returned below, so it inherits the exact idempotent replace-on-
+  // rerun behavior scripts/prerender.mjs's injectHeadMetadata() already
+  // gives every other tag here -- no second document-head mechanism, no
+  // separate marker pair, nothing new for that function to know about.
+  const jsonLdNodes = buildSiteJsonLdGraph();
+  if (projectJsonLd) {
+    jsonLdNodes.push(projectJsonLd);
+  }
+  lines.push(buildJsonLdScriptTag(jsonLdNodes));
 
   // Wrapped in a pair of unique HTML comment markers so
   // scripts/prerender.mjs's injectHeadMetadata() can always find and
