@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { getOptimizedImageSrc, getOptimizedImageSrcSet } from "./imageOptimization.js";
+
 
 // The template's large image. Image Navigation and the Archive Number
 // used to render here too, but both moved out to ProjectTemplate.jsx as
@@ -44,20 +44,30 @@ import { getOptimizedImageSrc, getOptimizedImageSrcSet } from "./imageOptimizati
 // gone -- the frame is now purely a centering/sizing box, not a visible
 // "container."
 //
-// Image loading (Josh review, final polish pass): this <img> requests a
-// properly-sized width variant through the same getOptimizedImageSrc/
-// getOptimizedImageSrcSet pipeline the homepage gallery already uses (see
-// imageOptimization.js) instead of the full original file.
+// Image loading (Josh review, final polish pass -- SUPERSEDED by the
+// Image Quality Policy pass below): this <img> used to request a
+// properly-sized width variant through the getOptimizedImageSrc/
+// getOptimizedImageSrcSet pipeline (see imageOptimization.js) instead of
+// the full original file.
+//
+// Image Quality Policy pass (launch blocker, Josh review): Project-page
+// images were visibly softer than their actual uploaded Sanity source
+// (a verified 2048x1024 original was being requested at a 1200px-wide,
+// quality-75 CDN transform). Project image viewing now requests
+// image.image directly -- the original, untransformed asset -- with no
+// width cap and no quality reduction; the browser/CSS still scales it
+// down visually exactly as before, only the requested byte source
+// changed. getOptimizedImageSrc/getOptimizedImageSrcSet are no longer
+// imported or called anywhere in this file. This does NOT apply to the
+// Archive (App.jsx's own getArchiveOptimizedImageSrc/SrcSet, and its
+// zoom-driven promotion effect, are untouched) or to the neighbor-image
+// preload effect in ProjectTemplate.jsx (deliberately left at its
+// existing capped size -- preloading full originals for images not yet
+// being viewed is exactly the broad/aggressive preloading this pass was
+// told not to introduce).
 // loading="eager"/fetchPriority="high" mirror what the homepage's own
 // single-large-image case (its "focused image" lightbox) already does
 // for the one prominent image a user is looking at -- see App.jsx.
-// Delivery (which sized asset to request) and presentation (how it's
-// laid out once it arrives) are kept strictly separate here: nothing
-// about this request-sizing logic constrains the image's own aspect
-// ratio or crops it -- both optimized delivery paths (the local
-// pre-generated variants and the live Sanity CDN transform) only ever
-// constrain width, letting height follow proportionally; see
-// imageOptimization.js's own comment.
 //
 // Image-to-image transition, SEQUENTIAL fade with a CONTROLLED tail
 // overlap (Josh review, timing-refinement pass): the previous pass (see
@@ -370,28 +380,30 @@ function IncomingOverlay({ image, armed, onFaded }) {
       }`}
       aria-hidden="true"
     >
-      <picture>
-        <source
-          type="image/webp"
-          srcSet={getOptimizedImageSrcSet(image.image, "webp")}
-          sizes="90vw"
-        />
-        <source
-          type="image/jpeg"
-          srcSet={getOptimizedImageSrcSet(image.image, "jpg")}
-          sizes="90vw"
-        />
-        <img
-          className="project-image-frame__img"
-          src={getOptimizedImageSrc(image.image, 1200)}
-          alt=""
-          loading="eager"
-          fetchpriority="high"
-          decoding="async"
-          onLoad={() => setLoaded(true)}
-          onError={() => setLoaded(true)}
-        />
-      </picture>
+      {/* Image Quality Policy pass (launch blocker, Josh review):
+          Project-page images now request the original, untransformed
+          Sanity/local asset directly (image.image -- the same raw URL
+          isSanityImageAsset/isLocalImageAsset already recognize, before
+          any width/quality transform is ever applied to it) instead of
+          going through getOptimizedImageSrc/getOptimizedImageSrcSet's
+          400/800/1200-capped, quality-75 derivative pipeline -- see
+          imageOptimization.js's own comments for that pipeline, which
+          this file no longer calls at all. No <picture>/<source>
+          format-negotiation is needed any more either: there is only one
+          URL now (the original), not multiple sized/format variants to
+          choose between. The browser still scales this down visually via
+          the exact same CSS (.project-image-frame__img, untouched) --
+          only the requested SOURCE changed, not layout/sizing/cropping. */}
+      <img
+        className="project-image-frame__img"
+        src={image.image}
+        alt=""
+        loading="eager"
+        fetchpriority="high"
+        decoding="async"
+        onLoad={() => setLoaded(true)}
+        onError={() => setLoaded(true)}
+      />
     </div>
   );
 }
@@ -644,35 +656,27 @@ export default function ImageViewer({ image, displayedImage, onImageLoaded }) {
     <div className="project-image-viewer">
       <div className="project-image-frame">
         <div className="project-image-frame__inner">
-          <picture>
-            <source
-              type="image/webp"
-              srcSet={getOptimizedImageSrcSet(renderedImage.image, "webp")}
-              sizes="90vw"
-            />
-            <source
-              type="image/jpeg"
-              srcSet={getOptimizedImageSrcSet(renderedImage.image, "jpg")}
-              sizes="90vw"
-            />
-            <img
-              ref={imgElRef}
-              className={`project-image-frame__img${
-                isFadedOut ? " project-image-frame__img--hidden" : ""
-              }${suppressBaseTransition ? " project-image-frame__img--no-transition" : ""}`}
-              src={getOptimizedImageSrc(renderedImage.image, 1200)}
-              alt={
-                renderedImage.title ||
-                renderedImage.caption ||
-                `Archive ${renderedImage.archiveNumber}`
-              }
-              loading="eager"
-              fetchpriority="high"
-              decoding="async"
-              onLoad={handleBaseLoad}
-              onError={handleBaseLoad}
-            />
-          </picture>
+          {/* Image Quality Policy pass: same change as IncomingOverlay's
+              own <img> above -- the original asset (renderedImage.image)
+              directly, no optimized-derivative pipeline, no
+              <picture>/<source> variant negotiation. */}
+          <img
+            ref={imgElRef}
+            className={`project-image-frame__img${
+              isFadedOut ? " project-image-frame__img--hidden" : ""
+            }${suppressBaseTransition ? " project-image-frame__img--no-transition" : ""}`}
+            src={renderedImage.image}
+            alt={
+              renderedImage.title ||
+              renderedImage.caption ||
+              `Archive ${renderedImage.archiveNumber}`
+            }
+            loading="eager"
+            fetchpriority="high"
+            decoding="async"
+            onLoad={handleBaseLoad}
+            onError={handleBaseLoad}
+          />
         </div>
         {showOverlay && overlayImage && (
           <IncomingOverlay image={overlayImage} armed={overlayArmed} onFaded={handleOverlayFaded} />
